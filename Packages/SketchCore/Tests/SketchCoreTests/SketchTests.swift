@@ -233,4 +233,46 @@ final class SketchTests: XCTestCase {
         XCTAssertEqual(s.strokes[0].points.first, oldest, "stroke start kept")
         XCTAssertEqual(s.strokes[0].points.last, s.pen)
     }
+
+    // MARK: Render split (SK-4)
+
+    func testSettledInkOnlyChangesOncePerChunk() {
+        var s = Sketch(pen: Point(x: 0.05, y: 0.95))
+        let canvas = CanvasSize(width: 400, height: 400)
+        var keys = Set<InkSplit>()
+        var settledByKey: [InkSplit: [Point]] = [:]
+        for i in 0..<3_000 {
+            if i.isMultiple(of: 2) { s.movePen(dx: 1, dy: 0, in: canvas) } else { s.movePen(dx: 0, dy: (i % 4 == 1) ? 1 : -1, in: canvas) }
+            let split = s.inkSplit(chunk: 256)
+            keys.insert(split)
+            let last = s.strokes[s.strokes.count - 1].points
+            let settled = Array(last.prefix(split.settledPoints))
+            if let earlier = settledByKey[split] {
+                XCTAssertEqual(earlier, settled, "settled ink changed without a new key")
+            } else {
+                settledByKey[split] = settled
+            }
+            XCTAssertLessThanOrEqual(last.count - (split.settledPoints - 1), 258, "live tail stays short")
+            XCTAssertLessThanOrEqual(split.settledPoints, last.count - 1, "the tip is always live")
+        }
+        XCTAssertLessThan(keys.count, 20, "about one settled redraw per 256 points, not one per move")
+    }
+
+    func testClearFadeAndThinningChangeTheSettledKey() {
+        var s = DemoDrawings.spiral()
+        let before = s.inkSplit()
+        s.fade(by: 0.1)
+        XCTAssertNotEqual(s.inkSplit(), before)
+        XCTAssertFalse(s.inkSplit().hasLiveStroke, "faded ink never grows")
+        let faded = s.inkSplit()
+        s.clear()
+        XCTAssertNotEqual(s.inkSplit(), faded)
+    }
+
+    func testRevisionIsNotEncoded() throws {
+        var s = DemoDrawings.spiral()
+        s.fade(by: 0.1)
+        let data = try JSONEncoder().encode(s)
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("revision"))
+    }
 }

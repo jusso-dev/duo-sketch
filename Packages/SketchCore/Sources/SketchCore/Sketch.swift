@@ -27,6 +27,20 @@ public struct Sketch: Sendable, Equatable, Codable {
     /// the sketch is empty. Points are fractions of a frame with this shape, so
     /// the drawing keeps its proportions when the canvas changes shape.
     public private(set) var aspectRatio: Double?
+    /// Bumped by every change other than drawing at the pen: clearing, fading
+    /// and thinning. Renderers use it to know when settled ink must be redrawn.
+    /// Not encoded.
+    public private(set) var revision = 0
+
+    private enum CodingKeys: String, CodingKey {
+        case pen, strokes, touchingEdge, aspectRatio
+    }
+
+    /// Two sketches are equal when they hold the same drawing. `revision` is
+    /// render bookkeeping and doesn't count.
+    public static func == (a: Sketch, b: Sketch) -> Bool {
+        a.pen == b.pen && a.strokes == b.strokes && a.touchingEdge == b.touchingEdge && a.aspectRatio == b.aspectRatio
+    }
 
     public init(pen: Point = .centre) {
         self.pen = pen
@@ -77,6 +91,7 @@ public struct Sketch: Sendable, Equatable, Codable {
     public mutating func clear() {
         strokes = []
         aspectRatio = nil
+        revision &+= 1
     }
 
     /// Fades every existing line by `amount` (0 to 1). Lines that fade out are removed.
@@ -90,7 +105,24 @@ public struct Sketch: Sendable, Equatable, Codable {
             return s.opacity > 0.01 ? s : nil
         }
         if isEmpty { aspectRatio = nil }
+        revision &+= 1
         return isEmpty
+    }
+
+    /// Splits the ink for rendering. Everything except the end of the stroke
+    /// being drawn is "settled": it only changes when `InkSplit` changes, so a
+    /// renderer can draw it once and keep it. The live part is at most
+    /// `chunk + 1` points, drawn from `settledPoints - 1` (one point of overlap)
+    /// to the end of the last stroke. The last two points are always live,
+    /// because drawing replaces the tip in place.
+    public func inkSplit(chunk: Int = 256) -> InkSplit {
+        let chunk = max(chunk, 1)
+        guard let last = strokes.last, last.opacity >= 1, last.points.count >= 2 else {
+            return InkSplit(revision: revision, strokeCount: strokes.count, settledPoints: strokes.last?.points.count ?? 0, hasLiveStroke: false)
+        }
+        let n = last.points.count
+        let settled = ((n - 2) / chunk) * chunk + 1
+        return InkSplit(revision: revision, strokeCount: strokes.count, settledPoints: settled, hasLiveStroke: true)
     }
 
     /// Points closer together than this (in canvas points) are merged: the tip of
@@ -143,6 +175,7 @@ public struct Sketch: Sendable, Equatable, Codable {
     /// only after `maximumPoints`, then not again until thousands more points
     /// are drawn.
     mutating func simplify(toAtMost target: Int, in size: CanvasSize) {
+        revision &+= 1
         var spacing = 1.0 // canvas points
         while pointCount > target, spacing < max(size.width, size.height) {
             var oldRemaining = pointCount - Sketch.newestPointsKept
@@ -191,4 +224,15 @@ public struct Sketch: Sendable, Equatable, Codable {
         let dot = abx * bcx + aby * bcy
         return abs(cross) < 1e-12 && dot > 0
     }
+}
+
+/// How the ink is split between a cached, settled layer and a small live tail.
+/// See `Sketch.inkSplit(chunk:)`.
+public struct InkSplit: Sendable, Hashable {
+    public var revision: Int
+    public var strokeCount: Int
+    /// Points of the last stroke that belong to the settled layer.
+    public var settledPoints: Int
+    /// False when the last stroke is faded ink, which never grows.
+    public var hasLiveStroke: Bool
 }
