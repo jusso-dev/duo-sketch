@@ -8,6 +8,8 @@ struct BoardView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.frameTheme) private var theme
+    @AppStorage(SettingsKeys.externalPreview) private var externalPreview = true
 
     private var layout: BoardLayout {
         BoardLayout.choose(
@@ -22,11 +24,15 @@ struct BoardView: View {
             frame
                 .padding(layout == .wide ? 28 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Theme.bodyShade.ignoresSafeArea())
+                .background(theme.bodyShade.ignoresSafeArea())
                 .toolbar { toolbar }
-                .toolbarBackground(Theme.bodyShade, for: .navigationBar)
+                .toolbarBackground(theme.bodyShade, for: .navigationBar)
                 .navigationBarTitleDisplayMode(.inline)
         }
+        .overlay(alignment: .bottomLeading) {
+            if LaunchOptions.foldDebug { FoldDebugOverlay(model: model) }
+        }
+        .externalDisplayPreview(model: model, isEnabled: $externalPreview)
         .task { await model.observeFold() }
         .onDeviceShake { model.deviceShaken() }
     }
@@ -38,7 +44,7 @@ struct BoardView: View {
                 Theme.frameShape
                     .fill(
                         LinearGradient(
-                            colors: [Theme.bodyHighlight, Theme.body, Theme.bodyShade],
+                            colors: [theme.bodyHighlight, theme.body, theme.bodyShade],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -119,12 +125,12 @@ struct BoardView: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous)
-                    .strokeBorder(Theme.bodyShade.opacity(0.6), lineWidth: 3)
+                    .strokeBorder(theme.bodyShade.opacity(0.6), lineWidth: 3)
             )
             .overlay {
                 // Reduce Motion: the board doesn't shake. Instead the drawing
                 // cross fades to a blank surface while it clears.
-                Theme.surface
+                theme.surface
                     .keyframeAnimator(initialValue: 0.0, trigger: model.shakeTrigger) { content, opacity in
                         content.opacity(reduceMotion ? opacity : 0)
                     } keyframes: { _ in
@@ -147,7 +153,7 @@ struct BoardView: View {
         Text("Duo Sketch")
             .font(.system(.footnote, design: .rounded).weight(.semibold))
             .tracking(1.5)
-            .foregroundStyle(Theme.label) // 4.8:1 or better on the body gradient
+            .foregroundStyle(theme.label) // 4.5:1 or better on the body, tested per palette
             .accessibilityHidden(true)
     }
 
@@ -156,8 +162,9 @@ struct BoardView: View {
     // whole board.
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItemGroup(placement: .topBarLeading) {
             ClearButton(model: model)
+            ReplayButton(model: model)
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             SettingsMenu(model: model)
@@ -166,12 +173,63 @@ struct BoardView: View {
     }
 }
 
-/// The canvas, reading the sketch from the model in its own body.
+/// The canvas, reading the sketch from the model in its own body. During a
+/// replay it shows the replay frame for the current time instead, redrawn at
+/// most 30 times a second.
 private struct LiveCanvas: View {
     let model: SketchViewModel
 
     var body: some View {
-        CanvasView(sketch: model.sketch)
+        if let replay = model.replay, let start = model.replayStartedAt {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                let elapsed = context.date.timeIntervalSince(start)
+                CanvasView(sketch: replay.frame(at: ReplayTimeline.progress(atElapsed: elapsed)))
+            }
+            .accessibilityLabel("Drawing, replaying")
+        } else {
+            CanvasView(sketch: model.sketch)
+        }
+    }
+}
+
+/// Plays the drawing back. Tap again to stop.
+private struct ReplayButton: View {
+    let model: SketchViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if model.isReplaying {
+            Button {
+                model.stopReplay()
+            } label: {
+                Label("Stop replay", systemImage: "stop.fill")
+            }
+        } else {
+            Button {
+                model.startReplay(reduceMotion: reduceMotion)
+            } label: {
+                Label("Replay", systemImage: "play.fill")
+            }
+            .disabled(model.sketch.isEmpty || reduceMotion)
+        }
+    }
+}
+
+/// Shows the fold posture and hinge angle, for checking poses on the iPhone
+/// Duo simulator. Only with the `-foldDebug` launch argument.
+private struct FoldDebugOverlay: View {
+    let model: SketchViewModel
+
+    var body: some View {
+        Text("Fold: \(model.posture.description)")
+            .font(.caption.monospaced())
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.black.opacity(0.7), in: Capsule())
+            .foregroundStyle(.white)
+            .padding()
+            .accessibilityIdentifier("foldDebug")
+            .allowsHitTesting(false)
     }
 }
 
@@ -198,11 +256,18 @@ private struct ClearButton: View {
 
 private struct ShareButton: View {
     let model: SketchViewModel
+    @Environment(\.frameTheme) private var theme
 
     var body: some View {
         Menu {
             shareLink(framed: true, title: "Share with frame", systemImage: "photo.artframe")
             shareLink(framed: false, title: "Share drawing only", systemImage: "scribble")
+            ShareLink(
+                item: ReplayMovie(sketch: model.sketch, canvasSize: model.canvasSize, theme: theme),
+                preview: SharePreview("Duo Sketch replay", image: Image(systemName: "play.rectangle"))
+            ) {
+                Label("Share replay video", systemImage: "play.rectangle")
+            }
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
@@ -212,7 +277,7 @@ private struct ShareButton: View {
     /// Each option offers a PNG first and an SVG second.
     private func shareLink(framed: Bool, title: String, systemImage: String) -> some View {
         ShareLink(
-            item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize, framed: framed),
+            item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize, framed: framed, theme: theme),
             preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
         ) {
             Label(title, systemImage: systemImage)
@@ -225,21 +290,30 @@ private struct ShareButton: View {
 private struct SettingsMenu: View {
     let model: SketchViewModel
     @AppStorage(SettingsKeys.hapticsEnabled) private var hapticsEnabled = true
+    @AppStorage(SettingsKeys.frameTheme) private var frameTheme = FramePalette.ID.eucalyptus
+    @AppStorage(SettingsKeys.externalPreview) private var externalPreview = true
 
     var body: some View {
         Menu {
             Toggle(isOn: $hapticsEnabled) {
                 Label("Haptics", systemImage: "hand.tap")
             }
+            Picker(selection: $frameTheme) {
+                ForEach(FramePalette.all) { palette in
+                    Text(palette.name).tag(palette.id)
+                }
+            } label: {
+                Label("Frame", systemImage: "paintpalette")
+            }
+            .pickerStyle(.menu)
+            Toggle(isOn: $externalPreview) {
+                Label("Preview on external display", systemImage: "tv")
+            }
         } label: {
             Label("Settings", systemImage: "gearshape")
         }
         .task(id: hapticsEnabled) { model.hapticsEnabled = hapticsEnabled }
     }
-}
-
-enum SettingsKeys {
-    static let hapticsEnabled = "hapticsEnabled"
 }
 
 #Preview("Portrait, no hinge") {

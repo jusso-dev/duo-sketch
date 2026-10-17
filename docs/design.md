@@ -2,7 +2,11 @@
 
 Duo Sketch is an original design. This note records the choices so contributors keep it that way.
 
-## Palette
+## Palettes
+
+There are three frame themes. Eucalyptus is the default; ocean and ochre are chosen in the gear menu. The hex values live in `FramePalette` in SketchCore, where tests check the contrast rules below and that no colour is red.
+
+### Eucalyptus
 
 | Role | Colour | Hex |
 | --- | --- | --- |
@@ -15,9 +19,37 @@ Duo Sketch is an original design. This note records the choices so contributors 
 | Dial shade | Dark brass | `#8C6A2F` |
 | Dial engraving | Dark eucalyptus | `#142A24` |
 
-Graphite on sand has a contrast ratio of about 11:1, well above 4.5:1. The sand wordmark is 5.9:1 on the eucalyptus body and 8.2:1 on the deep shade. The dial pointer and arrow are a darker eucalyptus (`#142A24`): 5.6:1 on brass and 3.0:1 on dark brass, so they stay above the 3:1 needed for graphics across the whole dial gradient.
+### Ocean
 
-The colours are fixed, so the board looks the same in light and dark appearance, the way a physical toy would. Because nothing changes, the ratios above hold in both. `testPaletteContrastInLightAndDark` in the app tests checks them in both appearances.
+| Role | Colour | Hex |
+| --- | --- | --- |
+| Body | Deep blue-teal | `#1F4F66` |
+| Body shade | Deeper teal | `#163B4D` |
+| Body highlight | Soft teal | `#3B6F87` |
+| Drawing surface | Pale sand | `#F2EAD8` |
+| Ink | Graphite | `#2B2B2B` |
+| Dials | Silver | `#C3CCD1` |
+| Dial shade | Dark silver | `#7D8B94` |
+| Dial engraving | Night blue | `#13232D` |
+
+### Ochre
+
+| Role | Colour | Hex |
+| --- | --- | --- |
+| Body | Burnt ochre | `#8A4A1C` |
+| Body shade | Deep ochre | `#6A3612` |
+| Body highlight | Soft ochre | `#A9632E` |
+| Drawing surface | Cream | `#F6ECD4` |
+| Ink | Graphite | `#2B2B2B` |
+| Dials | Bronze | `#B98F55` |
+| Dial shade | Dark bronze | `#80633A` |
+| Dial engraving | Umber | `#1C130A` |
+
+### Contrast
+
+In every theme, ink on the surface and the wordmark on the body are at least 4.5:1, and the dial engraving is at least 3:1 at both ends of the dial gradient. For eucalyptus: graphite on sand has a contrast ratio of about 11:1, well above 4.5:1. The sand wordmark is 5.9:1 on the eucalyptus body and 8.2:1 on the deep shade. The dial pointer and arrow are a darker eucalyptus (`#142A24`): 5.6:1 on brass and 3.0:1 on dark brass, so they stay above the 3:1 needed for graphics across the whole dial gradient.
+
+The colours are fixed, so the board looks the same in light and dark appearance, the way a physical toy would. Because nothing changes, the ratios above hold in both. `testPaletteContrastInLightAndDark` in the app tests checks every theme in both appearances.
 
 There is no red anywhere in the frame, dials, icon or screenshots, and no grey drawing surface.
 

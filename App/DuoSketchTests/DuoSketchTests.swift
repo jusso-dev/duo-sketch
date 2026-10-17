@@ -1,6 +1,7 @@
 import XCTest
 import UIKit
 import SwiftUI
+import AVFoundation
 import SketchCore
 @testable import DuoSketch
 
@@ -166,20 +167,25 @@ final class DuoSketchTests: XCTestCase {
         XCTAssertEqual(export.svgString(), SketchExport(sketch: export.sketch, canvasSize: tall).svgString())
     }
 
-    /// Text and ink on the fixed palette stay readable in light and dark
-    /// appearance (4.5:1), and the dial arrow stays visible (3:1).
+    /// Text and ink on every frame theme stay readable in light and dark
+    /// appearance (4.5:1), and the dial marks stay visible (3:1). SketchCore
+    /// checks the hex values; this checks the SwiftUI colours made from them.
     func testPaletteContrastInLightAndDark() {
-        for style in [UIUserInterfaceStyle.light, .dark] {
-            let traits = UITraitCollection(userInterfaceStyle: style)
-            func ratio(_ a: Color, _ b: Color) -> Double {
-                Self.contrast(UIColor(a).resolvedColor(with: traits), UIColor(b).resolvedColor(with: traits))
+        for id in FramePalette.ID.allCases {
+            let theme = FrameTheme(id)
+            for style in [UIUserInterfaceStyle.light, .dark] {
+                let traits = UITraitCollection(userInterfaceStyle: style)
+                func ratio(_ a: Color, _ b: Color) -> Double {
+                    Self.contrast(UIColor(a).resolvedColor(with: traits), UIColor(b).resolvedColor(with: traits))
+                }
+                let name = "\(id), \(style)"
+                XCTAssertGreaterThanOrEqual(ratio(theme.ink, theme.surface), 4.5, "ink on surface, \(name)")
+                XCTAssertGreaterThanOrEqual(ratio(theme.label, theme.body), 4.5, "wordmark on body, \(name)")
+                XCTAssertGreaterThanOrEqual(ratio(theme.label, theme.bodyShade), 4.5, "wordmark on shade, \(name)")
+                // The dial is a gradient; check both ends.
+                XCTAssertGreaterThanOrEqual(ratio(theme.dialMark, theme.dial), 3, "dial mark, \(name)")
+                XCTAssertGreaterThanOrEqual(ratio(theme.dialMark, theme.dialShade), 3, "dial mark on shade, \(name)")
             }
-            XCTAssertGreaterThanOrEqual(ratio(Theme.ink, Theme.surface), 4.5, "ink on sand, \(style)")
-            XCTAssertGreaterThanOrEqual(ratio(Theme.label, Theme.body), 4.5, "wordmark on body, \(style)")
-            XCTAssertGreaterThanOrEqual(ratio(Theme.label, Theme.bodyShade), 4.5, "wordmark on shade, \(style)")
-            // The dial is a gradient from brass to dark brass; check the darkest end.
-            XCTAssertGreaterThanOrEqual(ratio(Theme.dialMark, Theme.brass), 3, "dial arrow on brass, \(style)")
-            XCTAssertGreaterThanOrEqual(ratio(Theme.dialMark, Theme.brassDark), 3, "dial arrow on dark brass, \(style)")
         }
     }
 
@@ -195,6 +201,83 @@ final class DuoSketchTests: XCTestCase {
         }
         let (la, lb) = (luminance(a), luminance(b))
         return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+
+    /// The SVG and the settled ink layer follow the chosen theme.
+    func testExportsAndInkFollowTheTheme() {
+        let canvas = CanvasSize(width: 300, height: 300)
+        let ocean = SketchExport(sketch: DemoDrawings.spiral(), canvasSize: canvas, theme: FrameTheme(.ocean)).svgString()
+        XCTAssertTrue(ocean.contains(FramePalette.ocean.surface))
+        XCTAssertFalse(ocean.contains(FramePalette.eucalyptus.surface))
+
+        let sketch = DemoDrawings.spiral()
+        let a = SettledInkLayer(sketch: sketch, split: sketch.inkSplit(), ink: FrameTheme(.ochre).ink)
+        let b = SettledInkLayer(sketch: sketch, split: sketch.inkSplit(), ink: Color.white)
+        XCTAssertNotEqual(a, b, "a new ink colour redraws the settled layer")
+    }
+
+    /// A long press switches a dial to fine gearing: a quarter of the travel.
+    func testFineGearingMovesAQuarterAsFar() {
+        let model = SketchViewModel(foldService: UnavailableFoldStateService())
+        var spoken: [String] = []
+        model.announce = { spoken.append($0) }
+        model.canvasSize = CanvasSize(width: 240, height: 240)
+        model.toggleGear(.horizontal)
+        XCTAssertEqual(model.dial(.horizontal).gear, .fine)
+        XCTAssertEqual(model.dial(.vertical).gear, .coarse, "each dial keeps its own gear")
+        model.turn(.horizontal, by: 360) // 30 pt instead of 120
+        XCTAssertEqual(model.sketch.pen.x, 0.5 + 30.0 / 240, accuracy: 1e-9)
+        XCTAssertTrue(model.accessibilityValue(for: .horizontal).hasSuffix("fine gearing"))
+        model.toggleGear(.horizontal)
+        XCTAssertEqual(spoken, ["Fine gearing", "Coarse gearing"])
+    }
+
+    /// While a replay plays the dials don't draw, and a clear stops it first.
+    func testReplayBlocksDrawingAndStopsForAClear() async {
+        let model = SketchViewModel(
+            foldService: UnavailableFoldStateService(),
+            sketch: DemoDrawings.hills(),
+            clock: { 0 },
+            sleep: { _ in try? await Task.sleep(for: .seconds(3600)) }
+        )
+        model.canvasSize = CanvasSize(width: 360, height: 360)
+        model.startReplay(reduceMotion: true)
+        XCTAssertFalse(model.isReplaying, "Reduce Motion has nothing to play")
+        model.startReplay()
+        XCTAssertTrue(model.isReplaying)
+        let before = model.sketch
+        model.turn(.horizontal, by: 90)
+        XCTAssertEqual(model.sketch, before)
+        model.beginShakeClear()
+        XCTAssertFalse(model.isReplaying)
+        XCTAssertNil(model.replayTask)
+    }
+
+    func testReplayEndsOnItsOwn() async {
+        let model = SketchViewModel(foldService: UnavailableFoldStateService(), sketch: DemoDrawings.spiral(), sleep: { _ in })
+        model.startReplay()
+        await model.replayTask?.value
+        XCTAssertFalse(model.isReplaying)
+        model.startReplay()
+        XCTAssertNotNil(model.replay)
+        model.stopReplay()
+        XCTAssertNil(model.replay)
+    }
+
+    /// The replay video is a real movie of the right length, well under 10 MB.
+    func testReplayMovieWrites() async throws {
+        let canvas = CanvasSize(width: 300, height: 450)
+        let movie = ReplayMovie(sketch: DemoDrawings.spiral(size: canvas), canvasSize: canvas, longSide: 320, framesPerSecond: 10)
+        XCTAssertEqual(movie.pixelSize.height, 320)
+        XCTAssertEqual(movie.pixelSize.width % 2, 0)
+        let url = try await movie.write()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let bytes = try XCTUnwrap(try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int)
+        XCTAssertGreaterThan(bytes, 0)
+        XCTAssertLessThan(bytes, 10_000_000)
+        let asset = AVURLAsset(url: url)
+        let seconds = try await asset.load(.duration).seconds
+        XCTAssertEqual(seconds, ReplayTimeline.duration + movie.hold, accuracy: 0.2)
     }
 
     /// Each device shake takes a third of the ink's opacity.

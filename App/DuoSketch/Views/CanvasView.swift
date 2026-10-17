@@ -11,15 +11,16 @@ import SketchCore
 struct CanvasView: View {
     let sketch: Sketch
     var showsPen = true
+    @Environment(\.frameTheme) private var theme
 
     var body: some View {
         let split = sketch.inkSplit()
         ZStack {
-            SettledInkLayer(sketch: sketch, split: split)
+            SettledInkLayer(sketch: sketch, split: split, ink: theme.ink)
                 .equatable()
-            LiveInkLayer(sketch: sketch, split: split, showsPen: showsPen)
+            LiveInkLayer(sketch: sketch, split: split, showsPen: showsPen, ink: theme.ink)
         }
-        .background(Theme.surface)
+        .background(theme.surface)
         .accessibilityElement()
         .accessibilityLabel("Drawing")
         .accessibilityValue(CanvasView.accessibilityValue(for: sketch))
@@ -47,9 +48,10 @@ struct CanvasView: View {
 struct SettledInkLayer: View, Equatable {
     let sketch: Sketch
     let split: InkSplit
+    var ink = FrameTheme.eucalyptus.ink
 
     nonisolated static func == (a: SettledInkLayer, b: SettledInkLayer) -> Bool {
-        a.split == b.split && a.sketch.aspectRatio == b.sketch.aspectRatio
+        a.split == b.split && a.sketch.aspectRatio == b.sketch.aspectRatio && a.ink == b.ink
     }
 
     var body: some View {
@@ -58,7 +60,7 @@ struct SettledInkLayer: View, Equatable {
             let lastIndex = sketch.strokes.count - 1
             for (i, stroke) in sketch.strokes.enumerated() {
                 let count = (split.hasLiveStroke && i == lastIndex) ? split.settledPoints : stroke.points.count
-                InkPainter.stroke(stroke.points.prefix(count), opacity: stroke.opacity, frame: frame, in: &context)
+                InkPainter.stroke(stroke.points.prefix(count), opacity: stroke.opacity, ink: ink, frame: frame, in: &context)
             }
         }
     }
@@ -69,18 +71,19 @@ struct LiveInkLayer: View {
     let sketch: Sketch
     let split: InkSplit
     let showsPen: Bool
+    let ink: Color
 
     var body: some View {
         Canvas { context, size in
             let frame = sketch.frame(in: CanvasSize(width: size.width, height: size.height))
             if split.hasLiveStroke, let last = sketch.strokes.last {
                 let start = max(split.settledPoints - 1, 0)
-                InkPainter.stroke(last.points[start...], opacity: last.opacity, frame: frame, in: &context)
+                InkPainter.stroke(last.points[start...], opacity: last.opacity, ink: ink, frame: frame, in: &context)
             }
             if showsPen {
                 let pen = InkPainter.position(sketch.pen, in: frame)
                 let dot = CGRect(x: pen.x - 2.5, y: pen.y - 2.5, width: 5, height: 5)
-                context.fill(Path(ellipseIn: dot), with: .color(Theme.ink))
+                context.fill(Path(ellipseIn: dot), with: .color(ink))
             }
         }
     }
@@ -94,7 +97,7 @@ enum InkPainter {
         return CGPoint(x: position.x, y: position.y)
     }
 
-    static func stroke(_ points: ArraySlice<Point>, opacity: Double, frame: DrawingFrame, in context: inout GraphicsContext) {
+    static func stroke(_ points: ArraySlice<Point>, opacity: Double, ink: Color, frame: DrawingFrame, in context: inout GraphicsContext) {
         guard points.count > 1, let first = points.first else { return }
         var path = Path()
         path.move(to: position(first, in: frame))
@@ -103,7 +106,7 @@ enum InkPainter {
         }
         context.stroke(
             path,
-            with: .color(Theme.ink.opacity(opacity)),
+            with: .color(ink.opacity(opacity)),
             style: StrokeStyle(lineWidth: Theme.lineWidth, lineCap: .round, lineJoin: .round)
         )
     }

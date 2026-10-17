@@ -41,9 +41,22 @@ Duo Sketch works on every iPhone that runs iOS 18 or later.
 
 ## Sharing and settings
 
-- Share offers the drawing with its eucalyptus frame or on its own. Both come as a PNG at 3x, with an SVG as the second format. Nothing leaves the phone unless you share it.
-- The gear menu turns haptics on or off: dial ticks, edge bumps and the clear pattern. They also follow the system setting.
-- With Reduce Motion on, the board doesn't shake when it clears. The drawing fades out instead.
+- Share offers the drawing with its frame or on its own, as a PNG at 3x with an SVG as the second format. It also offers the replay as a short video. Everything is made on the phone, and nothing leaves it unless you share it.
+- Replay (the play button) draws the picture again in the order you made it, over eight seconds. The dials rest while it plays.
+- Hold a dial still for a moment to switch it to fine gearing: a quarter of the travel per turn, for detail work. A small engraved dot marks a dial in fine gearing. Hold again to switch back. VoiceOver users get a custom action for the same thing.
+- The gear menu has:
+  - Haptics on or off: dial ticks, edge bumps and the clear pattern. They also follow the system setting.
+  - Frame: eucalyptus, ocean or ochre.
+  - Preview on external display: when the phone is connected to a TV or monitor, or AirPlaying, the drawing shows there live for anyone watching.
+- With Reduce Motion on, the board doesn't shake when it clears. The drawing fades out instead, and Replay is off.
+
+### About the outer display
+
+The external display preview uses Apple's scene accessory API (`sceneAccessory` with `ExternalNonInteractiveAccessory`). Apple doesn't offer iPhone Duo's own outer display to apps through this API, except for camera capture (`CameraCaptureAccessory`), so a drawing app can't mirror the board onto the back of the phone.
+
+### Checking fold poses
+
+Launch with `-foldDebug` to show the current fold posture and hinge angle on the board. On the iPhone Duo simulator, use the open, close and fold controls under the device and watch the overlay.
 
 ## Project layout
 

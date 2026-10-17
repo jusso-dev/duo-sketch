@@ -9,6 +9,8 @@ The screenshots come from a UI test, `App/DuoSketchUITests/ScreenshotTests.swift
 | `3-easel-mode.png` | Half-open easel mode | `-demoDrawing spiral -foldPosture easel` |
 | `4-shake-clear.png` | Shake clear, mid animation | `-demoDrawing hills -holdShake`, then tap Clear |
 | `5-share-sheet.png` | Share sheet | `-demoDrawing skyline`, then Share, Share with frame |
+| `6-ocean-theme.png` | Ocean frame | `-demoDrawing skyline -frameTheme ocean` |
+| `7-ochre-theme.png` | Ochre frame | `-demoDrawing hills -frameTheme ochre` |
 
 The demo drawings (spiral, hills and skyline) are in `Packages/SketchCore/Sources/SketchCore/DemoDrawings.swift`. They are original and drawn with dial moves only. Demo launches don't read or write the saved drawing, and `-foldPosture` fixes the fold pose so easel mode can be captured on any simulator.
 

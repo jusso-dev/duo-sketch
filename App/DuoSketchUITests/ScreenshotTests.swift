@@ -53,6 +53,16 @@ final class ScreenshotTests: XCTestCase {
         snap(app, "5-share-sheet")
     }
 
+    func test6OceanTheme() {
+        let app = launch(drawing: "skyline", extra: ["-frameTheme", "ocean"])
+        snap(app, "6-ocean-theme")
+    }
+
+    func test7OchreTheme() {
+        let app = launch(drawing: "hills", extra: ["-frameTheme", "ochre"])
+        snap(app, "7-ochre-theme")
+    }
+
     private func launch(drawing: String, posture: String = "open", extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-demoDrawing", drawing, "-foldPosture", posture] + extra
