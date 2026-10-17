@@ -138,6 +138,15 @@ struct BoardView: View {
             }
             .disabled(model.sketch.isEmpty)
         }
+        ToolbarItem(placement: .topBarTrailing) {
+            ShareLink(
+                item: SketchExport(sketch: model.sketch),
+                preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
+            ) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+            .disabled(model.sketch.isEmpty)
+        }
     }
 }
 
