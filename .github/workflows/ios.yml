@@ -6,8 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
+# Nothing by default. Each job asks for only what it needs.
+permissions: {}
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -18,8 +18,12 @@ jobs:
     name: SketchCore and app (xcode-27 hosted runner)
     runs-on: xcode-27
     timeout-minutes: 60
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: List Xcodes, SDKs and simulators
         run: |
