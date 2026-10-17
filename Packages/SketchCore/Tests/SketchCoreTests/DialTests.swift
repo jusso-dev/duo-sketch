@@ -49,4 +49,30 @@ final class DialTests: XCTestCase {
         XCTAssertEqual(dial.rotate(by: .infinity), .none)
         XCTAssertEqual(dial.totalDegrees, 0)
     }
+
+    func testTwoDialsDrawALineThroughTheSketch() {
+        // Alternating small turns of both dials gives a staircase that reads as a diagonal.
+        var across = Dial()
+        var upDown = Dial()
+        var sketch = Sketch()
+        let size = CanvasSize(width: 240, height: 240)
+        for _ in 0..<36 {
+            sketch.movePen(dx: across.rotate(by: 10).distance, dy: 0, in: size)
+            sketch.movePen(dx: 0, dy: upDown.rotate(by: 10).distance, in: size)
+        }
+        // 36 x 10 degrees = one full turn each = 120 pt = half the canvas.
+        XCTAssertEqual(sketch.pen.x, 1.0, accuracy: 1e-9)
+        XCTAssertEqual(sketch.pen.y, 0.0, accuracy: 1e-9)
+        XCTAssertEqual(sketch.strokes.count, 1)
+        XCTAssertEqual(sketch.pointCount, 73)
+    }
+
+    func testAnticlockwiseDrawsLeftAndDown() {
+        var dial = Dial()
+        var sketch = Sketch()
+        let size = CanvasSize(width: 120, height: 120)
+        sketch.movePen(dx: dial.rotate(by: -90).distance, dy: 0, in: size)
+        sketch.movePen(dx: 0, dy: dial.rotate(by: -90).distance, in: size)
+        XCTAssertEqual(sketch.pen, Point(x: 0.25, y: 0.75))
+    }
 }
