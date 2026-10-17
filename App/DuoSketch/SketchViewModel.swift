@@ -141,18 +141,40 @@ final class SketchViewModel {
             await sleep(ClearController.shakeDuration)
             // Finish unconditionally. Re-checking the time here used to leave the
             // board stuck in `.shaking` whenever the clock lagged the sleep.
-            withAnimation(.easeOut(duration: 0.25)) {
-                _ = clearController.finishShakeClear(sketch: &sketch)
+            let cleared = withAnimation(.easeOut(duration: 0.25)) {
+                clearController.finishShakeClear(sketch: &sketch)
             }
+            if cleared { announce("Board cleared") }
         }
     }
 
     /// Device shake. This is the clear gesture on phones without a hinge
     /// (`.unavailable`), and it works on iPhone Duo too.
     func deviceShaken() {
-        withAnimation(.easeOut(duration: 0.3)) {
-            _ = clearController.deviceShaken(sketch: &sketch)
+        let hadInk = !sketch.isEmpty
+        let empty = withAnimation(.easeOut(duration: 0.3)) {
+            clearController.deviceShaken(sketch: &sketch)
         }
+        if hadInk, !clearController.isShaking { announce(empty ? "Board cleared" : "Drawing faded") }
         haptics.bump()
+    }
+
+    // MARK: Accessibility
+
+    /// Spoken by VoiceOver when the board clears or fades. Injected for tests.
+    @ObservationIgnored var announce: @MainActor (String) -> Void = { message in
+        AccessibilityNotification.Announcement(message).post()
+    }
+
+    /// The pen's position along one dial's axis, for VoiceOver.
+    func accessibilityValue(for axis: DialAxis) -> String {
+        switch axis {
+        case .horizontal: return "Pen \(Self.percent(sketch.pen.x)) percent across"
+        case .vertical: return "Pen \(Self.percent(sketch.pen.y)) percent down"
+        }
+    }
+
+    private static func percent(_ fraction: Double) -> Int {
+        Int((min(max(fraction, 0), 1) * 100).rounded())
     }
 }

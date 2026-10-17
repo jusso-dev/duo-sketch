@@ -200,4 +200,41 @@ final class DuoSketchTests: XCTestCase {
         UIWindow().motionEnded(.motionShake, with: nil)
         wait(for: [notPosted], timeout: 0.2)
     }
+
+    // MARK: VoiceOver (SK-10)
+
+    func testDialsReportThePenPosition() {
+        let model = SketchViewModel(foldService: UnavailableFoldStateService())
+        model.canvasSize = CanvasSize(width: 300, height: 300)
+        XCTAssertEqual(model.accessibilityValue(for: .horizontal), "Pen 50 percent across")
+        model.turn(.horizontal, by: 90)   // 30 pt right, a tenth of the width
+        model.turn(.vertical, by: -180)   // 60 pt down
+        XCTAssertEqual(model.accessibilityValue(for: .horizontal), "Pen 60 percent across")
+        XCTAssertEqual(model.accessibilityValue(for: .vertical), "Pen 70 percent down")
+    }
+
+    func testCanvasValueDescribesTheDrawingNotAPointCount() {
+        XCTAssertEqual(CanvasView.accessibilityValue(for: Sketch()), "Empty, pen 50 percent across, 50 percent down")
+        let value = CanvasView.accessibilityValue(for: DemoDrawings.spiral())
+        XCTAssertTrue(value.hasPrefix("Drawing with 1 line, pen "), value)
+        XCTAssertFalse(value.contains("points"))
+    }
+
+    func testClearsAreAnnounced() async {
+        var spoken: [String] = []
+        let model = SketchViewModel(
+            foldService: UnavailableFoldStateService(),
+            sketch: DemoDrawings.hills(),
+            clock: { 0 },
+            sleep: { _ in }
+        )
+        model.announce = { spoken.append($0) }
+        model.deviceShaken()
+        XCTAssertEqual(spoken, ["Drawing faded"])
+        model.beginShakeClear()
+        await model.shakeTask?.value
+        XCTAssertEqual(spoken, ["Drawing faded", "Board cleared"])
+        model.deviceShaken()
+        XCTAssertEqual(spoken.count, 2, "nothing to announce on an empty board")
+    }
 }
