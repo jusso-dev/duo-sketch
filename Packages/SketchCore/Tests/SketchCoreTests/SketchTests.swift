@@ -92,4 +92,51 @@ final class SketchTests: XCTestCase {
         let data = try JSONEncoder().encode(s)
         XCTAssertEqual(try JSONDecoder().decode(Sketch.self, from: data), s)
     }
+
+    // MARK: Stroke growth (issue #21, finding 1)
+
+    func testTinyMovesAreMergedIntoSpacedPoints() {
+        var s = Sketch(pen: Point(x: 0.1, y: 0.9))
+        let canvas = CanvasSize(width: 400, height: 400)
+        for i in 0..<2_000 {
+            // 0.1 pt steps in a staircase: never a straight continuation.
+            if i.isMultiple(of: 2) { s.movePen(dx: 0.1, dy: 0, in: canvas) } else { s.movePen(dx: 0, dy: 0.1, in: canvas) }
+        }
+        // About 141 pt of diagonal travel at 0.5 pt spacing.
+        XCTAssertLessThan(s.pointCount, 400)
+        XCTAssertGreaterThan(s.pointCount, 100)
+        XCTAssertEqual(s.strokes.last?.points.last, s.pen, "the stroke still ends at the pen")
+        let points = s.strokes[0].points
+        for i in 1..<(points.count - 1) {
+            XCTAssertGreaterThanOrEqual(Sketch.distance(points[i - 1], points[i], in: canvas), Sketch.minimumSpacing - 1e-9)
+        }
+    }
+
+    func testPointCountIsCappedOnLongDrawings() {
+        var s = Sketch(pen: Point(x: 0.05, y: 0.95))
+        let canvas = CanvasSize(width: 400, height: 400)
+        var direction = 1.0
+        for i in 0..<60_000 {
+            // A 1 pt zigzag that turns back every 300 pt so it stays on the canvas.
+            if i.isMultiple(of: 600) { direction = -direction }
+            if i.isMultiple(of: 2) { s.movePen(dx: direction, dy: 0, in: canvas) } else { s.movePen(dx: 0, dy: (i % 4 == 1) ? 1 : -1, in: canvas) }
+        }
+        XCTAssertLessThanOrEqual(s.pointCount, Sketch.maximumPoints)
+        XCTAssertEqual(s.strokes.last?.points.last, s.pen)
+        XCTAssertFalse(s.isEmpty)
+    }
+
+    func testThinningKeepsEndsAndDropsClosePoints() {
+        let line = [
+            Point(x: 0, y: 0), Point(x: 0.001, y: 0), Point(x: 0.01, y: 0),
+            Point(x: 0.011, y: 0), Point(x: 0.0115, y: 0)
+        ]
+        let out = Sketch.thinned(line, minimumDistance: 0.005)
+        XCTAssertEqual(out, [Point(x: 0, y: 0), Point(x: 0.01, y: 0), Point(x: 0.0115, y: 0)])
+    }
+
+    func testThinningLeavesShortStrokesAlone() {
+        let two = [Point(x: 0, y: 0), Point(x: 0.0001, y: 0)]
+        XCTAssertEqual(Sketch.thinned(two, minimumDistance: 0.5), two)
+    }
 }
