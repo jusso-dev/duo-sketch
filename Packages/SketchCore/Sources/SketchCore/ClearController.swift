@@ -28,29 +28,6 @@ public struct ClearController: Sendable, Equatable {
         return true
     }
 
-    /// 0 to 1 through the shake, or nil when idle.
-    public func progress(at time: Double) -> Double? {
-        guard case .shaking(let start) = phase else { return nil }
-        return min(max((time - start) / ClearController.shakeDuration, 0), 1)
-    }
-
-    /// Horizontal offset of the board during the shake, as a fraction of `amplitude`.
-    /// A decaying wobble with three swings.
-    public func shakeOffset(at time: Double, amplitude: Double = 14) -> Double {
-        guard let p = progress(at: time) else { return 0 }
-        return amplitude * (1 - p) * sin(p * 6 * .pi)
-    }
-
-    /// Advances the shake. When it finishes, the sketch is cleared and true is returned.
-    @discardableResult
-    public mutating func tick(at time: Double, sketch: inout Sketch) -> Bool {
-        guard case .shaking(let start) = phase,
-              time - start >= ClearController.shakeDuration - 1e-9 else { return false }
-        sketch.clear()
-        phase = .idle
-        return true
-    }
-
     /// Ends a full clear shake now, whatever the clock says: clears the sketch
     /// and returns to idle. Use this when the shake animation has finished, so a
     /// clock that lags behind the animation (for example one that pauses while
