@@ -168,7 +168,7 @@ final class SketchViewModel {
     // MARK: Undo clear
 
     /// How long Undo stays available after a full clear, in seconds.
-    static let undoWindow = 6.0
+    nonisolated static let undoWindow = 6.0
 
     /// True for a few seconds after a full clear (fold or Clear button), until
     /// the pen draws again. Shutting the phone briefly to check something and
