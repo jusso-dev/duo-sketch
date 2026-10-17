@@ -34,15 +34,19 @@ final class SketchViewModel {
     @ObservationIgnored private let sleep: @Sendable (Double) async -> Void
     /// The task that finishes the current shake clear. Tests await it.
     @ObservationIgnored private(set) var shakeTask: Task<Void, Never>?
+    /// Keeps the drawing between launches. Nil for demo launches and previews.
+    @ObservationIgnored private let store: (any SketchStore)?
 
     init(
         foldService: any FoldStateService,
         sketch: Sketch = Sketch(),
+        store: (any SketchStore)? = nil,
         clock: (@MainActor () -> Double)? = nil,
         sleep: (@Sendable (Double) async -> Void)? = nil
     ) {
         self.foldService = foldService
         self.sketch = sketch
+        self.store = store
         self.posture = foldService.current
         self.clock = clock ?? SketchViewModel.continuousSeconds()
         self.sleep = sleep ?? { seconds in _ = try? await Task.sleep(for: .seconds(seconds)) }
@@ -202,6 +206,46 @@ final class SketchViewModel {
         withAnimation(.easeOut(duration: 0.25)) { sketch = previous }
         dropUndo()
         announce("Drawing restored")
+    }
+
+    // MARK: Saving
+
+    /// The last save, or the restore it chains after. Tests await it.
+    @ObservationIgnored private(set) var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var lastSaved: SketchArchive?
+
+    /// Saves when the scene leaves the foreground. iOS can end a backgrounded
+    /// app at any time without telling it, so this is the last safe moment.
+    func scenePhaseChanged(to phase: ScenePhase) {
+        guard phase != .active else { return }
+        save()
+    }
+
+    /// Takes a copy of the drawing (copy on write, so this is cheap) and
+    /// encodes and writes it off the main actor. Saves run one after another,
+    /// so a slow earlier save can't overwrite a newer one.
+    func save() {
+        guard let store else { return }
+        let archive = SketchArchive(sketch: sketch, undoSketch: canUndoClear ? clearedSketch : nil)
+        guard archive != lastSaved else { return }
+        lastSaved = archive
+        let previous = saveTask
+        saveTask = Task.detached(priority: .utility) {
+            await previous?.value
+            try? store.save(archive)
+        }
+    }
+
+    /// Puts back the drawing saved last time, unless the pen has already drawn
+    /// something since launch. A clear that still had Undo on offer when the
+    /// app left the foreground offers it again.
+    func restore() async {
+        guard let store else { return }
+        let archive = await Task.detached(priority: .userInitiated) { store.load() }.value
+        guard let archive, sketch.isEmpty, !canUndoClear else { return }
+        sketch = archive.sketch
+        lastSaved = archive
+        if let undo = archive.undoSketch, !undo.isEmpty { offerUndo(of: undo) }
     }
 
     // MARK: Accessibility
