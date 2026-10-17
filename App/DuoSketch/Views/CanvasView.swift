@@ -32,7 +32,7 @@ struct CanvasView: View {
         .accessibilityValue(sketch.isEmpty ? "Empty" : "\(sketch.pointCount) points")
     }
 
-    private func point(_ p: SketchCore.Point, in size: CGSize) -> CGPoint {
+    private func point(_ p: Point, in size: CGSize) -> CGPoint {
         CGPoint(x: p.x * size.width, y: p.y * size.height)
     }
 }
