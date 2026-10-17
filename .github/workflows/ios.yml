@@ -114,6 +114,12 @@ jobs:
               if duo:
                   pick = (rt, duo[-1])
                   break
+          # If no runtime lists it as supported but the Duo device type exists, still try
+          # it on the newest runtime. The create step falls back to a standard iPhone if it fails.
+          if pick is None:
+              duo = [d for d in alltypes if "iPhone-Duo" in d["identifier"]]
+              if duo:
+                  pick = (rts[0], duo[-1])
           # Otherwise the newest iPhone on the newest runtime.
           if pick is None:
               rt = rts[0]
