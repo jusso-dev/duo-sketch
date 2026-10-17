@@ -51,7 +51,7 @@ public struct Sketch: Sendable, Equatable, Codable {
         touchingEdge = clamped
 
         guard next != pen else { return PenMove(moved: false, bumpedEdge: bumped) }
-        append(next)
+        append(next, in: size)
         pen = next
         return PenMove(moved: true, bumpedEdge: bumped)
     }
@@ -74,18 +74,75 @@ public struct Sketch: Sendable, Equatable, Codable {
         return isEmpty
     }
 
-    private mutating func append(_ next: Point) {
-        if let last = strokes.indices.last, strokes[last].opacity >= 1 {
-            var points = strokes[last].points
-            if points.count >= 2, Sketch.isStraightContinuation(points[points.count - 2], points[points.count - 1], next) {
-                points[points.count - 1] = next
-            } else {
-                points.append(next)
-            }
-            strokes[last].points = points
-        } else {
+    /// Points closer together than this (in canvas points) are merged: the tip of
+    /// the stroke follows the pen until it is at least this far from the point
+    /// before it. Below half a point the difference can't be seen.
+    public static let minimumSpacing = 0.5
+
+    /// Most points a sketch keeps. Past this, every stroke is simplified
+    /// (keeping its ends) until the sketch is back to `simplifiedTarget`.
+    public static let maximumPoints = 20_000
+    static let simplifiedTarget = 15_000
+
+    /// Adds `next` to the current stroke, changing the stroke's point array in
+    /// place so a move costs amortised O(1) rather than a copy of the stroke.
+    private mutating func append(_ next: Point, in size: CanvasSize) {
+        guard let last = strokes.indices.last, strokes[last].opacity >= 1 else {
             strokes.append(Stroke(points: [pen, next]))
+            return
         }
+        let n = strokes[last].points.count
+        if n >= 2 {
+            let anchor = strokes[last].points[n - 2]
+            let tip = strokes[last].points[n - 1]
+            if Sketch.isStraightContinuation(anchor, tip, next)
+                || Sketch.distance(anchor, next, in: size) < Sketch.minimumSpacing {
+                strokes[last].points[n - 1] = next
+                return
+            }
+        }
+        strokes[last].points.append(next)
+        if pointCount > Sketch.maximumPoints {
+            simplify(toAtMost: Sketch.simplifiedTarget)
+        }
+    }
+
+    /// Distance between two normalised points, in canvas points.
+    static func distance(_ a: Point, _ b: Point, in size: CanvasSize) -> Double {
+        let dx = (b.x - a.x) * size.width
+        let dy = (b.y - a.y) * size.height
+        return (dx * dx + dy * dy).squareRoot()
+    }
+
+    /// Thins every stroke, doubling the spacing between kept points until the
+    /// sketch has at most `target` points. Each pass is O(n) and roughly halves
+    /// the density, so detail fades gradually instead of collapsing. Stroke ends
+    /// are always kept, so the pen stays where it is. Runs rarely: only after
+    /// `maximumPoints`, then not again until thousands more points are drawn.
+    mutating func simplify(toAtMost target: Int) {
+        var spacing = 0.002 // normalised, about 0.8 pt on a 400 pt canvas
+        while pointCount > target, spacing < 1 {
+            for i in strokes.indices where strokes[i].points.count > 2 {
+                strokes[i].points = Sketch.thinned(strokes[i].points, minimumDistance: spacing)
+            }
+            spacing *= 2
+        }
+    }
+
+    /// Keeps the first and last point, and each point in between that is at
+    /// least `minimumDistance` (normalised) from the last point kept.
+    static func thinned(_ points: [Point], minimumDistance: Double) -> [Point] {
+        guard points.count > 2 else { return points }
+        let limit = minimumDistance * minimumDistance
+        var out: [Point] = [points[0]]
+        out.reserveCapacity(points.count)
+        for p in points[1..<(points.count - 1)] {
+            let k = out[out.count - 1]
+            let dx = p.x - k.x, dy = p.y - k.y
+            if dx * dx + dy * dy >= limit { out.append(p) }
+        }
+        out.append(points[points.count - 1])
+        return out
     }
 
     /// True when `c` carries on in the same direction as `a` to `b`.
