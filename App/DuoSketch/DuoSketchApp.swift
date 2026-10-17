@@ -25,7 +25,7 @@ struct DuoSketchApp: App {
                         foldService: LaunchOptions.foldService ?? hinge,
                         sketch: demo ?? Sketch(),
                         store: demo == nil ? FileSketchStore.applicationSupport() : nil,
-                        sleep: LaunchOptions.holdShake ? { _ in await LaunchOptions.waitForever() } : nil
+                        sleep: LaunchOptions.shakeSleep
                     )
                     self.model = model
                     Task { await model.restore() }
@@ -51,8 +51,13 @@ enum LaunchOptions {
     /// Board offset shown while a held shake is on screen.
     static let heldShakeOffset = 12.0
 
-    static func waitForever() async {
-        while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+    /// The model's sleep for a held shake: it never returns, so the clear
+    /// never finishes. Nil for every other launch, so the model sleeps for real.
+    static var shakeSleep: (@Sendable (Double) async -> Void)? {
+        guard holdShake else { return nil }
+        return { _ in
+            while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+        }
     }
 
     static var demoSketch: Sketch? {
