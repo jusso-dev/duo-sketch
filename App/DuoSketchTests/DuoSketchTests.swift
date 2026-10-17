@@ -126,4 +126,31 @@ final class DuoSketchTests: XCTestCase {
         let manifest = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest") as? [String: Any])
         XCTAssertEqual(manifest["UIApplicationSupportsMultipleScenes"] as? Bool, false)
     }
+
+    /// Shakes are caught by a first-responder view controller, debounced to
+    /// one per 0.5 s.
+    func testShakeResponderDebouncesShakes() {
+        var now = 0.0
+        var shakes = 0
+        let controller = ShakeResponderController(clock: { now })
+        controller.onShake = { shakes += 1 }
+        XCTAssertTrue(controller.canBecomeFirstResponder)
+        controller.motionEnded(.motionShake, with: nil)
+        now = 0.2
+        controller.motionEnded(.motionShake, with: nil)
+        XCTAssertEqual(shakes, 1, "a second event from the same shake is dropped")
+        now = 0.8
+        controller.motionEnded(.motionShake, with: nil)
+        XCTAssertEqual(shakes, 2)
+        controller.motionEnded(.remoteControlPlay, with: nil)
+        XCTAssertEqual(shakes, 2, "other motions are ignored")
+    }
+
+    /// The old code added `motionEnded` to every `UIWindow` in an extension.
+    func testWindowsKeepUIKitsOwnMotionHandling() {
+        let notPosted = XCTNSNotificationExpectation(name: Notification.Name("DuoSketch.deviceDidShake"))
+        notPosted.isInverted = true
+        UIWindow().motionEnded(.motionShake, with: nil)
+        wait(for: [notPosted], timeout: 0.2)
+    }
 }
