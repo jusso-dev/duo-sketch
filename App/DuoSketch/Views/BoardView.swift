@@ -5,10 +5,17 @@ import SketchCore
 /// current size class and fold posture.
 struct BoardView: View {
     @Bindable var model: SketchViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    // Only the portrait arrangement for now; size class layouts come with #7.
-    private let layout: BoardLayout = .portrait
+    private var layout: BoardLayout {
+        BoardLayout.choose(
+            horizontal: horizontalSizeClass == .regular ? .regular : .compact,
+            vertical: verticalSizeClass == .regular ? .regular : .compact,
+            fold: model.posture
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -52,15 +59,51 @@ struct BoardView: View {
             }
     }
 
+    @ViewBuilder
     private var arranged: some View {
-        VStack(spacing: 16) {
-            surface
-            HStack {
+        switch layout {
+        case .portrait:
+            VStack(spacing: 16) {
+                surface
+                HStack {
+                    DialView(axis: .horizontal, model: model)
+                    Spacer()
+                    brand
+                    Spacer()
+                    DialView(axis: .vertical, model: model)
+                }
+            }
+        case .wide:
+            VStack(spacing: 24) {
+                surface
+                HStack {
+                    DialView(axis: .horizontal, model: model, diameter: 124)
+                    Spacer()
+                    brand
+                    Spacer()
+                    DialView(axis: .vertical, model: model, diameter: 124)
+                }
+            }
+        case .landscape:
+            HStack(spacing: 16) {
                 DialView(axis: .horizontal, model: model)
-                Spacer()
-                brand
-                Spacer()
+                surface
                 DialView(axis: .vertical, model: model)
+            }
+        case .easel:
+            VStack(spacing: 0) {
+                surface
+                    .frame(maxHeight: .infinity)
+                    .padding(.bottom, 20)
+                HStack {
+                    DialView(axis: .horizontal, model: model, diameter: 110)
+                    Spacer()
+                    brand
+                    Spacer()
+                    DialView(axis: .vertical, model: model, diameter: 110)
+                }
+                .frame(maxHeight: .infinity)
+                .padding(.top, 20)
             }
         }
     }
@@ -102,3 +145,9 @@ struct BoardView: View {
     BoardView(model: SketchViewModel(foldService: UnavailableFoldStateService(), sketch: DemoDrawings.hills()))
 }
 
+#Preview("Easel") {
+    BoardView(model: SketchViewModel(
+        foldService: MockFoldStateService(initial: .partiallyOpen(angleDegrees: 100)),
+        sketch: DemoDrawings.spiral()
+    ))
+}
