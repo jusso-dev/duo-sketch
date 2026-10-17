@@ -4,8 +4,11 @@ import Foundation
 public struct DialConfig: Sendable, Equatable {
     /// How far the pen travels, in canvas points, for one full turn.
     public var pointsPerTurn: Double
-    /// Haptic detents per full turn.
-    public var detentsPerTurn: Int
+    /// Haptic detents per full turn. At least 1: zero would make the detent
+    /// step infinite and silently turn detents off.
+    public var detentsPerTurn: Int {
+        didSet { detentsPerTurn = max(detentsPerTurn, 1) }
+    }
 
     public init(pointsPerTurn: Double = 120, detentsPerTurn: Int = 24) {
         self.pointsPerTurn = pointsPerTurn
@@ -31,7 +34,7 @@ public struct DialStep: Sendable, Equatable {
 /// (`drag(to:)`) or relative rotation (`rotate(by:)`) and it reports pen travel
 /// and detent crossings.
 public struct Dial: Sendable, Equatable {
-    public var config: DialConfig
+    public private(set) var config: DialConfig
     /// Total rotation since creation, in degrees. Positive is clockwise.
     public private(set) var totalDegrees: Double = 0
     private var lastAngle: Double?
@@ -99,8 +102,13 @@ public struct Dial: Sendable, Equatable {
         lastTouch = nil
     }
 
+    /// The most one call to `rotate(by:)` turns the dial: ten full turns.
+    /// Larger finite values used to trap when the detent count became an Int.
+    public static let maximumStepDegrees = 3600.0
+
     public mutating func rotate(by degrees: Double) -> DialStep {
         guard degrees.isFinite, degrees != 0 else { return .none }
+        let degrees = min(max(degrees, -Dial.maximumStepDegrees), Dial.maximumStepDegrees)
         let step = 360 / Double(config.detentsPerTurn)
         let before = (totalDegrees / step).rounded(.down)
         totalDegrees += degrees
@@ -108,7 +116,7 @@ public struct Dial: Sendable, Equatable {
         return DialStep(
             degrees: degrees,
             distance: degrees / 360 * config.pointsPerTurn,
-            detentsCrossed: Int(abs(after - before))
+            detentsCrossed: Int(exactly: abs(after - before)) ?? 0
         )
     }
 

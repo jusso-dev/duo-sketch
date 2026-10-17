@@ -2,13 +2,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 import SketchCore
 
-/// Shareable drawing. Offers a framed PNG first and an SVG second.
+/// Shareable drawing. Offers a PNG first and an SVG second. The PNG is the
+/// framed card, or just the drawing when `framed` is false.
 /// Both keep the drawing's aspect ratio, with the longer side `longSide` pixels.
 struct SketchExport: Transferable {
     let sketch: Sketch
     /// The on-screen canvas the drawing was made on. Points are fractions of it.
     var canvasSize = CanvasSize(width: 1, height: 1)
     var longSide: Double = 1080
+    /// True for the eucalyptus card around the drawing, false for the drawing alone.
+    var framed = true
 
     /// PNG render scale. The card is laid out in points at `longSide / scale`.
     static let scale: Double = 3
@@ -36,10 +39,13 @@ struct SketchExport: Transferable {
     /// SVG document size: the drawing's aspect ratio at `longSide`.
     var svgSize: CanvasSize { drawingShape.scaled(toLongSide: longSide) }
 
-    /// Size of the drawing inside the PNG card, in points. The card adds
-    /// `cardPadding` on every side, so the whole card's long side is `longSide / scale`.
+    /// Frame width around the drawing in the PNG, in points. Zero when plain.
+    var padding: Double { framed ? SketchExport.cardPadding : 0 }
+
+    /// Size of the drawing inside the PNG, in points. The card adds `padding`
+    /// on every side, so the whole image's long side is `longSide / scale`.
     var cardCanvasSize: CanvasSize {
-        drawingShape.scaled(toLongSide: longSide / SketchExport.scale - 2 * SketchExport.cardPadding)
+        drawingShape.scaled(toLongSide: longSide / SketchExport.scale - 2 * padding)
     }
 
     func svgString() -> String {
@@ -60,7 +66,7 @@ struct SketchExport: Transferable {
         let renderer = ImageRenderer(content: ExportCard(
             sketch: sketch,
             canvas: CGSize(width: inner.width, height: inner.height),
-            padding: SketchExport.cardPadding
+            framed: framed
         ))
         renderer.scale = SketchExport.scale
         guard let image = renderer.uiImage, let data = image.pngData() else {
@@ -70,17 +76,22 @@ struct SketchExport: Transferable {
     }
 }
 
-/// The framed card used for PNG export.
+/// The image used for PNG export: the drawing on its frame, or on its own.
 private struct ExportCard: View {
     let sketch: Sketch
     let canvas: CGSize
-    let padding: CGFloat
+    let framed: Bool
 
     var body: some View {
-        CanvasView(sketch: sketch, showsPen: false)
+        let drawing = CanvasView(sketch: sketch, showsPen: false)
             .frame(width: canvas.width, height: canvas.height)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous))
-            .padding(padding)
-            .background(Theme.body)
+        if framed {
+            drawing
+                .clipShape(RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous))
+                .padding(SketchExport.cardPadding)
+                .background(Theme.body)
+        } else {
+            drawing
+        }
     }
 }

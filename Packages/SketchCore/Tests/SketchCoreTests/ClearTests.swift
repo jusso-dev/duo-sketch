@@ -140,18 +140,25 @@ final class FoldClearPolicyTests: XCTestCase {
     func testEndToEndWithMockService() async {
         let mock = MockFoldStateService(initial: .open)
         let stream = mock.updates
+        // A quick close and reopen (0.2 s shut) must not clear...
         mock.closeAndReopen()
+        // ...but staying shut for 1 s and opening to an easel does.
+        mock.send(.closed)
         mock.send(.partiallyOpen(angleDegrees: 100))
         mock.send(.open)
         mock.finish()
-        var policy = FoldClearPolicy(minimumClosedDuration: 0)
-        var clears = 0
-        var t = 0.0
+        // One timestamp per posture the stream delivers, current first.
+        let times = [0.0, 0.5, 1.0, 1.2, 1.4, 2.0, 3.0, 3.5]
+        var policy = FoldClearPolicy()
+        XCTAssertEqual(policy.minimumClosedDuration, 0.4, "uses the real rule")
+        var clearedAt: [Double] = []
+        var i = 0
         for await posture in stream {
-            t += 1
-            if policy.handle(posture, at: t) { clears += 1 }
+            if policy.handle(posture, at: times[i]) { clearedAt.append(times[i]) }
+            i += 1
         }
-        XCTAssertEqual(clears, 1)
+        XCTAssertEqual(i, times.count)
+        XCTAssertEqual(clearedAt, [3.0])
     }
 }
 

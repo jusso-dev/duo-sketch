@@ -48,6 +48,23 @@ final class HapticThrottleTests: XCTestCase {
         for i in 0..<1000 where t.shouldFire(at: Double(i) / 1000) { fired += 1 }
         XCTAssertEqual(fired, 30, accuracy: 1)
     }
+
+    func testZeroNegativeAndNaNRatesClampToOnePerSecond() {
+        for rate in [0.0, -5, .nan] {
+            var t = HapticThrottle(maxPerSecond: rate)
+            XCTAssertEqual(t.maxPerSecond, 1)
+            XCTAssertTrue(t.shouldFire(at: 0))
+            XCTAssertFalse(t.shouldFire(at: 0.5))
+            XCTAssertTrue(t.shouldFire(at: 1), "keeps firing, once a second")
+        }
+        var t = HapticThrottle()
+        t.maxPerSecond = 0
+        XCTAssertEqual(t.maxPerSecond, 1)
+        var fast = HapticThrottle(maxPerSecond: .infinity)
+        XCTAssertEqual(fast.maxPerSecond, HapticThrottle.ceiling)
+        XCTAssertTrue(fast.shouldFire(at: 0))
+        XCTAssertFalse(fast.shouldFire(at: 0.0001), "infinity no longer means no limit")
+    }
 }
 
 final class SVGExporterTests: XCTestCase {
@@ -56,6 +73,25 @@ final class SVGExporterTests: XCTestCase {
         XCTAssertTrue(svg.hasPrefix("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\""))
         XCTAssertFalse(svg.contains("polyline"))
         XCTAssertTrue(svg.contains("<rect"))
+    }
+
+    func testOneStroke() {
+        var s = Sketch()
+        s.movePen(dx: 50, dy: 0, in: CanvasSize(width: 100, height: 100))
+        let svg = SVGExporter.svg(s, width: 300, height: 150)
+        XCTAssertEqual(svg.components(separatedBy: "<polyline").count - 1, 1)
+        XCTAssertTrue(svg.contains("points=\"150,75 300,75\""), svg)
+        XCTAssertTrue(svg.contains("stroke-opacity=\"1\""))
+    }
+
+    func testFormatNeverTraps() {
+        XCTAssertEqual(SVGExporter.fmt(.infinity), "0")
+        XCTAssertEqual(SVGExporter.fmt(-.infinity), "0")
+        XCTAssertEqual(SVGExporter.fmt(.nan), "0")
+        XCTAssertEqual(SVGExporter.fmt(1e20), String(1e20))
+        XCTAssertEqual(SVGExporter.fmt(1.5e307), String(1.5e307))
+        XCTAssertEqual(SVGExporter.fmt(12), "12")
+        XCTAssertEqual(SVGExporter.fmt(1.234), "1.23")
     }
 
     func testStrokesAreScaledAndEscaped() {
@@ -87,6 +123,13 @@ final class DemoDrawingsTests: XCTestCase {
         XCTAssertEqual(DemoDrawings.spiral(), DemoDrawings.spiral())
         XCTAssertFalse(DemoDrawings.spiral().isEmpty)
         XCTAssertFalse(DemoDrawings.hills().isEmpty)
+        XCTAssertEqual(DemoDrawings.skyline(), DemoDrawings.skyline())
+        XCTAssertFalse(DemoDrawings.skyline().isEmpty)
+        // Buildings rise from the baseline and the pen ends back on it.
+        let skyline = DemoDrawings.skyline()
+        XCTAssertEqual(skyline.pen.y, 0.85, accuracy: 1e-9)
+        let top = skyline.strokes.flatMap(\.points).map(\.y).min() ?? 1
+        XCTAssertEqual(top, 0.85 - 200.0 / 360, accuracy: 1e-6)
     }
 }
 

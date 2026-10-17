@@ -22,9 +22,10 @@ struct DuoSketchApp: App {
                     let demo = LaunchOptions.demoSketch
                     // Demo launches don't touch the saved drawing.
                     let model = SketchViewModel(
-                        foldService: hinge,
+                        foldService: LaunchOptions.foldService ?? hinge,
                         sketch: demo ?? Sketch(),
-                        store: demo == nil ? FileSketchStore.applicationSupport() : nil
+                        store: demo == nil ? FileSketchStore.applicationSupport() : nil,
+                        sleep: LaunchOptions.shakeSleep
                     )
                     self.model = model
                     Task { await model.restore() }
@@ -38,15 +39,49 @@ struct DuoSketchApp: App {
 }
 
 /// Launch arguments for UI tests and screenshots.
-/// `-demoDrawing spiral` or `-demoDrawing hills`.
+/// - `-demoDrawing spiral`, `hills`, `skyline` or `blank`. Demo launches don't
+///   read or write the saved drawing.
+/// - `-foldPosture easel`, `open` or `closed` fixes the fold posture instead of
+///   reading the hinge, so easel mode can be shown on any simulator.
+/// - `-holdShake` freezes a shake clear mid swing and never finishes it, so a
+///   screenshot of the shake doesn't depend on timing.
 enum LaunchOptions {
+    static let holdShake = ProcessInfo.processInfo.arguments.contains("-holdShake")
+
+    /// Board offset shown while a held shake is on screen.
+    static let heldShakeOffset = 12.0
+
+    /// The model's sleep for a held shake: it never returns, so the clear
+    /// never finishes. Nil for every other launch, so the model sleeps for real.
+    static var shakeSleep: (@Sendable (Double) async -> Void)? {
+        guard holdShake else { return nil }
+        return { _ in
+            while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+        }
+    }
+
     static var demoSketch: Sketch? {
-        let args = ProcessInfo.processInfo.arguments
-        guard let i = args.firstIndex(of: "-demoDrawing"), i + 1 < args.count else { return nil }
-        switch args[i + 1] {
+        switch value(after: "-demoDrawing") {
         case "spiral": return DemoDrawings.spiral()
         case "hills": return DemoDrawings.hills()
+        case "skyline": return DemoDrawings.skyline()
+        case "blank": return Sketch()
         default: return nil
         }
+    }
+
+    static var foldService: (any FoldStateService)? {
+        switch value(after: "-foldPosture") {
+        case "easel": return StaticFoldStateService(.partiallyOpen(angleDegrees: 100))
+        case "open": return StaticFoldStateService(.open)
+        case "closed": return StaticFoldStateService(.closed)
+        default: return nil
+        }
+    }
+
+    private static func value(after flag: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return args[i + 1]
     }
 }

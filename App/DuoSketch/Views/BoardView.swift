@@ -35,7 +35,7 @@ struct BoardView: View {
         arranged
             .padding(layout == .wide ? 24 : 16)
             .background(
-                RoundedRectangle(cornerRadius: Theme.frameCorner, style: .continuous)
+                Theme.frameShape
                     .fill(
                         LinearGradient(
                             colors: [Theme.bodyHighlight, Theme.body, Theme.bodyShade],
@@ -46,7 +46,7 @@ struct BoardView: View {
                     .shadow(color: .black.opacity(0.3), radius: 10, y: 6)
             )
             .keyframeAnimator(initialValue: 0.0, trigger: model.shakeTrigger) { content, offset in
-                content.offset(x: reduceMotion ? 0 : offset)
+                content.offset(x: reduceMotion ? 0 : shakeOffset(animated: offset))
             } keyframes: { _ in
                 KeyframeTrack {
                     CubicKeyframe(14, duration: 0.08)
@@ -57,6 +57,12 @@ struct BoardView: View {
                     CubicKeyframe(0, duration: 0.12)
                 }
             }
+    }
+
+    /// The animated offset, or a fixed one while a `-holdShake` launch holds
+    /// the shake for a screenshot.
+    private func shakeOffset(animated: Double) -> Double {
+        LaunchOptions.holdShake && model.clearController.isShaking ? LaunchOptions.heldShakeOffset : animated
     }
 
     @ViewBuilder
@@ -115,6 +121,23 @@ struct BoardView: View {
                 RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous)
                     .strokeBorder(Theme.bodyShade.opacity(0.6), lineWidth: 3)
             )
+            .overlay {
+                // Reduce Motion: the board doesn't shake. Instead the drawing
+                // cross fades to a blank surface while it clears.
+                Theme.surface
+                    .keyframeAnimator(initialValue: 0.0, trigger: model.shakeTrigger) { content, opacity in
+                        content.opacity(reduceMotion ? opacity : 0)
+                    } keyframes: { _ in
+                        KeyframeTrack {
+                            LinearKeyframe(1, duration: ClearController.shakeDuration)
+                            LinearKeyframe(1, duration: 0.15)
+                            LinearKeyframe(0, duration: 0.25)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
                 model.canvasSize = CanvasSize(width: size.width, height: size.height)
             }
@@ -124,7 +147,7 @@ struct BoardView: View {
         Text("Duo Sketch")
             .font(.system(.footnote, design: .rounded).weight(.semibold))
             .tracking(1.5)
-            .foregroundStyle(Theme.label.opacity(0.85))
+            .foregroundStyle(Theme.label) // 4.8:1 or better on the body gradient
             .accessibilityHidden(true)
     }
 
@@ -136,7 +159,8 @@ struct BoardView: View {
         ToolbarItem(placement: .topBarLeading) {
             ClearButton(model: model)
         }
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            SettingsMenu(model: model)
             ShareButton(model: model)
         }
     }
@@ -176,14 +200,46 @@ private struct ShareButton: View {
     let model: SketchViewModel
 
     var body: some View {
-        ShareLink(
-            item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize),
-            preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
-        ) {
+        Menu {
+            shareLink(framed: true, title: "Share with frame", systemImage: "photo.artframe")
+            shareLink(framed: false, title: "Share drawing only", systemImage: "scribble")
+        } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
         .disabled(model.sketch.isEmpty)
     }
+
+    /// Each option offers a PNG first and an SVG second.
+    private func shareLink(framed: Bool, title: String, systemImage: String) -> some View {
+        ShareLink(
+            item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize, framed: framed),
+            preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
+        ) {
+            Label(title, systemImage: systemImage)
+        }
+    }
+}
+
+/// In-app settings. The Haptics toggle covers every haptic in the app (dial
+/// ticks, edge bumps and the clear pattern); they also follow the system setting.
+private struct SettingsMenu: View {
+    let model: SketchViewModel
+    @AppStorage(SettingsKeys.hapticsEnabled) private var hapticsEnabled = true
+
+    var body: some View {
+        Menu {
+            Toggle(isOn: $hapticsEnabled) {
+                Label("Haptics", systemImage: "hand.tap")
+            }
+        } label: {
+            Label("Settings", systemImage: "gearshape")
+        }
+        .task(id: hapticsEnabled) { model.hapticsEnabled = hapticsEnabled }
+    }
+}
+
+enum SettingsKeys {
+    static let hapticsEnabled = "hapticsEnabled"
 }
 
 #Preview("Portrait, no hinge") {

@@ -35,6 +35,36 @@ final class DialTests: XCTestCase {
         XCTAssertEqual(dial.rotate(by: -121).detentsCrossed, 9) // -1, crosses 0 too
     }
 
+    func testDetentsCountedAcrossTheZeroWrap() {
+        var dial = Dial(config: DialConfig(detentsPerTurn: 24)) // 15 degrees per detent
+        dial.begin(at: 350)
+        // 350 to 10 is 20 degrees clockwise, crossing the 15 degree detent.
+        XCTAssertEqual(dial.drag(to: 10).detentsCrossed, 1)
+        // 10 back to 340 is 30 degrees anticlockwise: past 15 and 0.
+        XCTAssertEqual(dial.drag(to: 340).detentsCrossed, 2)
+    }
+
+    func testHugeRotationIsClampedInsteadOfTrapping() {
+        var dial = Dial()
+        let step = dial.rotate(by: 1e300)
+        XCTAssertEqual(step.degrees, Dial.maximumStepDegrees)
+        XCTAssertEqual(step.detentsCrossed, 240)
+        XCTAssertEqual(dial.rotate(by: -1e300).degrees, -Dial.maximumStepDegrees)
+        XCTAssertEqual(dial.rotate(by: .infinity), .none)
+        XCTAssertEqual(dial.rotate(by: .nan), .none)
+    }
+
+    func testDetentsPerTurnCannotDropBelowOne() {
+        XCTAssertEqual(DialConfig(detentsPerTurn: 0).detentsPerTurn, 1)
+        var config = DialConfig()
+        config.detentsPerTurn = 0
+        XCTAssertEqual(config.detentsPerTurn, 1)
+        config.detentsPerTurn = -5
+        XCTAssertEqual(config.detentsPerTurn, 1)
+        var dial = Dial(config: config)
+        XCTAssertEqual(dial.rotate(by: 360).detentsCrossed, 1)
+    }
+
     func testCapAngleStaysInRange() {
         var dial = Dial()
         dial.rotate(by: -30)

@@ -165,8 +165,11 @@ final class SketchViewModel {
         let empty = withAnimation(.easeOut(duration: 0.3)) {
             clearController.deviceShaken(sketch: &sketch)
         }
-        if hadInk, !clearController.isShaking { announce(empty ? "Board cleared" : "Drawing faded") }
-        haptics.bump()
+        // Nothing to fade, or a fold clear is already shaking: no feedback.
+        guard hadInk, !clearController.isShaking else { return }
+        announce(empty ? "Board cleared" : "Drawing faded")
+        // The shake that clears plays the same rigid pattern as a fold clear.
+        if empty { haptics.shake() } else { haptics.bump() }
     }
 
     // MARK: Undo clear

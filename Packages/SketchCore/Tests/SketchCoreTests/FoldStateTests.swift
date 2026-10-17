@@ -85,6 +85,46 @@ final class FoldStateTests: XCTestCase {
         XCTAssertEqual(seen, [.unavailable])
     }
 
+    func testStaticServiceKeepsItsPosture() async {
+        let service = StaticFoldStateService(.partiallyOpen(angleDegrees: 100))
+        XCTAssertTrue(service.isHingeAvailable)
+        var seen: [FoldPosture] = []
+        for await p in service.updates { seen.append(p) }
+        XCTAssertEqual(seen, [.partiallyOpen(angleDegrees: 100)])
+    }
+
+    func testSlowSubscriberKeepsOnlyTheNewestPostures() async {
+        let mock = MockFoldStateService(initial: .open)
+        let stream = mock.updates
+        for i in 1...(FoldBroadcaster.bufferSize + 50) { mock.send(.partiallyOpen(angleDegrees: Double(i) / 10)) }
+        mock.finish()
+        var seen: [FoldPosture] = []
+        for await p in stream { seen.append(p) }
+        XCTAssertEqual(seen.count, FoldBroadcaster.bufferSize)
+        XCTAssertEqual(seen.last, .partiallyOpen(angleDegrees: Double(FoldBroadcaster.bufferSize + 50) / 10))
+    }
+
+    func testUnreadSubscriberKeepsAWholeFoldGesture() async {
+        // Open flat, close in 2 degree steps, then open again: what the hinge
+        // service publishes at most for one fold. Nobody reads until the end.
+        let mock = MockFoldStateService(initial: .open)
+        let stream = mock.updates
+        for a in stride(from: 178.0, through: 2, by: -2) { mock.send(.partiallyOpen(angleDegrees: a)) }
+        mock.send(.closed)
+        for a in stride(from: 2.0, through: 178, by: 2) { mock.send(.partiallyOpen(angleDegrees: a)) }
+        mock.send(.open)
+        mock.finish()
+        var policy = FoldClearPolicy()
+        var t = 0.0
+        var clears = 0
+        for await p in stream {
+            t += 0.01
+            if policy.handle(p, at: t) { clears += 1 }
+            if p == .closed { t += 1 } // stayed shut for a second
+        }
+        XCTAssertEqual(clears, 1, "the .closed posture was not dropped")
+    }
+
     func testOpeningScriptAndOpenFraction() {
         let mock = MockFoldStateService()
         XCTAssertEqual(mock.current, .closed)

@@ -159,6 +159,8 @@ jobs:
           echo "Created simulator $UDID"
           echo "::notice::Tests run on $DEVNAME, runtime $RUNTIME"
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "runtime=$RUNTIME" >> "$GITHUB_OUTPUT"
+          echo "slug=$(echo "$DEVNAME" | tr '[:upper:]_ ' '[:lower:]--')" >> "$GITHUB_OUTPUT"
 
       - name: Build and test app
         working-directory: App
@@ -168,6 +170,47 @@ jobs:
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -resultBundlePath build/TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO build test
+
+      - name: Export screenshots
+        if: always()
+        run: |
+          if [ -d App/build/TestResults.xcresult ]; then
+            scripts/export_screenshots.sh App/build/TestResults.xcresult "Screenshots/${{ steps.sim.outputs.slug }}"
+          fi
+
+      # App Store screenshots also need a 6.9 inch iPhone. Only on manual runs,
+      # to keep pull request runs short.
+      - name: Screenshots on a 6.9 inch iPhone
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: App
+        run: |
+          set -o pipefail
+          RUNTIME="${{ steps.sim.outputs.runtime }}"
+          read -r DEVTYPE DEVNAME < <(xcrun simctl list -j runtimes | python3 -c '
+          import json, sys
+          rt = [r for r in json.load(sys.stdin)["runtimes"] if r["identifier"] == sys.argv[1]][0]
+          big = [d for d in rt["supportedDeviceTypes"] if d["name"].startswith("iPhone") and d["name"].endswith("Pro Max")]
+          if not big:
+              raise SystemExit("::error::No Pro Max iPhone on " + sys.argv[1])
+          p = max(big, key=lambda d: d.get("minRuntimeVersion", 0))
+          print(p["identifier"], p["name"].replace(" ", "_"))' "$RUNTIME")
+          UDID=$(xcrun simctl create "DuoSketch-69" "$DEVTYPE" "$RUNTIME")
+          echo "::notice::6.9 inch screenshots on $DEVNAME"
+          xcodebuild -project DuoSketch.xcodeproj -scheme DuoSketch \
+            -destination "id=$UDID" \
+            -only-testing:DuoSketchUITests/ScreenshotTests \
+            -resultBundlePath build/Screenshots69.xcresult \
+            CODE_SIGNING_ALLOWED=NO test
+          ../scripts/export_screenshots.sh build/Screenshots69.xcresult \
+            "../Screenshots/$(echo "$DEVNAME" | tr '[:upper:]_ ' '[:lower:]--')"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Screenshots
+          path: Screenshots
+          if-no-files-found: ignore
 
       - name: Upload test results
         if: always()

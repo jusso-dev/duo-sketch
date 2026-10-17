@@ -48,12 +48,21 @@ targets:
     dependencies:
       - target: DuoSketch
       - package: SketchCore
+  DuoSketchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - DuoSketchUITests
+    dependencies:
+      - target: DuoSketch
 schemes:
   DuoSketch:
     build:
       targets:
         DuoSketch: all
         DuoSketchTests: [test]
+        DuoSketchUITests: [test]
     test:
       targets:
         - DuoSketchTests
+        - DuoSketchUITests
