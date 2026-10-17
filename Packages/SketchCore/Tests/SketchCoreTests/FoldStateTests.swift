@@ -1,78 +1,94 @@
 import XCTest
 @testable import SketchCore
 
-@MainActor
 final class FoldStateTests: XCTestCase {
-    func testNilReadingMeansUnknown() {
-        XCTAssertEqual(FoldState(reading: nil), .unknown)
+    func testNilReadingMeansUnavailable() {
+        XCTAssertEqual(FoldPosture(reading: nil), .unavailable)
     }
 
     func testStatusMapping() {
-        XCTAssertEqual(FoldState(reading: .init(status: .closed, angleDegrees: 3)), .closed)
-        XCTAssertEqual(FoldState(reading: .init(status: .fullyOpen, angleDegrees: 178)), .open)
-        XCTAssertEqual(FoldState(reading: .init(status: .partiallyOpen, angleDegrees: 95)), .halfOpen(angle: 95))
+        XCTAssertEqual(FoldPosture(reading: .init(status: .closed, angleDegrees: 3)), .closed)
+        XCTAssertEqual(FoldPosture(reading: .init(status: .fullyOpen, angleDegrees: 178)), .open)
+        XCTAssertEqual(FoldPosture(reading: .init(status: .partiallyOpen, angleDegrees: 95)), .partiallyOpen(angleDegrees: 95))
     }
 
-    func testHalfOpenAngleIsClampedAndSanitised() {
-        XCTAssertEqual(FoldState(reading: .init(status: .partiallyOpen, angleDegrees: -10)), .halfOpen(angle: 0))
-        XCTAssertEqual(FoldState(reading: .init(status: .partiallyOpen, angleDegrees: 400)), .halfOpen(angle: 180))
-        XCTAssertEqual(FoldState(reading: .init(status: .partiallyOpen, angleDegrees: .nan)), .halfOpen(angle: 90))
+    func testAngleIsClampedAndSanitised() {
+        XCTAssertEqual(FoldPosture(reading: .init(status: .partiallyOpen, angleDegrees: -10)), .partiallyOpen(angleDegrees: 0))
+        XCTAssertEqual(FoldPosture(reading: .init(status: .partiallyOpen, angleDegrees: 400)), .partiallyOpen(angleDegrees: 180))
+        XCTAssertEqual(FoldPosture(reading: .init(status: .partiallyOpen, angleDegrees: .nan)), .partiallyOpen(angleDegrees: 90))
     }
 
-    func testAngleAndFlags() {
-        XCTAssertEqual(FoldState.closed.angle, 0)
-        XCTAssertEqual(FoldState.open.angle, 180)
-        XCTAssertNil(FoldState.unknown.angle)
-        XCTAssertTrue(FoldState.halfOpen(angle: 45).isHalfOpen)
-        XCTAssertEqual(FoldState.halfOpen(angle: 44.6).description, "halfOpen(45°)")
+    func testHelpers() {
+        XCTAssertEqual(FoldPosture.closed.angleDegrees, 0)
+        XCTAssertEqual(FoldPosture.open.angleDegrees, 180)
+        XCTAssertNil(FoldPosture.unavailable.angleDegrees)
+        XCTAssertTrue(FoldPosture.partiallyOpen(angleDegrees: 45).isPartiallyOpen)
+        XCTAssertEqual(FoldPosture.partiallyOpen(angleDegrees: 44.6).description, "partiallyOpen(45°)")
     }
 
-    func testMockDeliversChangesInOrderAndSkipsDuplicates() {
-        let mock = MockFoldStateService(initial: .open)
-        var seen: [FoldState] = []
-        let token = mock.observe { seen.append($0) }
-        mock.send(.open)
+    func testMockFansOutToTwoSubscribersAndSkipsDuplicates() async {
+        let mock = MockFoldStateService(.open)
+        let a = mock.updates
+        let b = mock.updates
+        XCTAssertEqual(mock.subscriberCount, 2)
+        mock.send(.open) // duplicate, not delivered
         mock.closeAndReopen()
-        XCTAssertEqual(seen, [.halfOpen(angle: 60), .closed, .halfOpen(angle: 60), .open])
+        mock.finish()
+        var seenA: [FoldPosture] = []
+        for await p in a { seenA.append(p) }
+        var seenB: [FoldPosture] = []
+        for await p in b { seenB.append(p) }
+        let expected: [FoldPosture] = [.partiallyOpen(angleDegrees: 60), .closed, .partiallyOpen(angleDegrees: 60), .open]
+        XCTAssertEqual(seenA, expected)
+        XCTAssertEqual(seenB, expected)
         XCTAssertEqual(mock.current, .open)
-        token.cancel()
-        mock.send(.closed)
-        XCTAssertEqual(seen.count, 4)
+        XCTAssertEqual(mock.subscriberCount, 0)
     }
 
-    func testObservationStopsWhenReleased() {
+    func testCancelledStreamUnsubscribes() async {
         let mock = MockFoldStateService()
-        var count = 0
-        var token: FoldObservation? = mock.observe { _ in count += 1 }
-        mock.send(.closed)
-        XCTAssertNotNil(token)
-        token = nil
-        mock.send(.open)
-        XCTAssertEqual(count, 1)
-        XCTAssertEqual(mock.observerCount, 0)
+        let task = Task {
+            for await _ in mock.updates {}
+        }
+        while mock.subscriberCount == 0 { await Task.yield() }
+        task.cancel()
+        await task.value
+        XCTAssertEqual(mock.subscriberCount, 0)
     }
 
-    func testHingeServiceTracksAvailability() {
-        let service = HingeFoldStateService()
+    func testHingeServiceThresholdAndAvailability() async {
+        let service = HingeFoldStateService(angleThreshold: 2)
         XCTAssertFalse(service.isHingeAvailable)
+        let stream = service.updates
         service.update(reading: .init(status: .partiallyOpen, angleDegrees: 120))
+        service.update(reading: .init(status: .partiallyOpen, angleDegrees: 121.5)) // below threshold
+        service.update(reading: .init(status: .partiallyOpen, angleDegrees: 123))
+        service.update(reading: .init(status: .fullyOpen, angleDegrees: 180))
         XCTAssertTrue(service.isHingeAvailable)
-        XCTAssertEqual(service.current, .halfOpen(angle: 120))
         service.update(reading: nil)
-        XCTAssertFalse(service.isHingeAvailable)
-        XCTAssertEqual(service.current, .unknown)
+        XCTAssertEqual(service.current, .unavailable)
+        var seen: [FoldPosture] = []
+        for await p in stream {
+            seen.append(p)
+            if seen.count == 4 { break }
+        }
+        XCTAssertEqual(seen, [.partiallyOpen(angleDegrees: 120), .partiallyOpen(angleDegrees: 123), .open, .unavailable])
     }
 
-    func testNoHingeService() {
-        let service = NoHingeFoldStateService()
+    func testStaticService() async {
+        let service = StaticFoldStateService()
         XCTAssertFalse(service.isHingeAvailable)
-        XCTAssertEqual(service.current, .unknown)
+        XCTAssertEqual(service.current, .unavailable)
+        var count = 0
+        for await _ in service.updates { count += 1 }
+        XCTAssertEqual(count, 0)
     }
 
-    func testMockReadingUpdatesAvailability() {
+    func testMockReading() {
         let mock = MockFoldStateService()
         mock.send(reading: nil)
         XCTAssertFalse(mock.isHingeAvailable)
-        XCTAssertEqual(mock.current, .unknown)
+        mock.send(reading: .init(status: .closed, angleDegrees: 0))
+        XCTAssertEqual(mock.current, .closed)
     }
 }
