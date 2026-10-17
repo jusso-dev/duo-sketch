@@ -72,6 +72,29 @@ jobs:
         working-directory: App
         run: xcodegen generate
 
+      - name: Ensure an iOS 27.1+ simulator runtime
+        timeout-minutes: 25
+        run: |
+          have_runtime() {
+            xcrun simctl list runtimes -j | python3 -c '
+          import json, sys
+          rts = json.load(sys.stdin)["runtimes"]
+          ok = [r for r in rts if r.get("isAvailable") and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
+                and [int(x) for x in r["version"].split(".")[:2]] >= [27, 1]]
+          sys.exit(0 if ok else 1)'
+          }
+          if have_runtime; then
+            echo "An iOS 27.1+ runtime is already installed."
+          else
+            echo "No iOS 27.1+ runtime. Downloading with xcodebuild -downloadPlatform iOS."
+            if xcodebuild -downloadPlatform iOS; then
+              echo "Download finished."
+            else
+              echo "::warning::xcodebuild -downloadPlatform iOS failed. Tests will fall back to a standard iPhone on the newest installed runtime."
+            fi
+          fi
+          xcrun simctl list runtimes
+
       - name: Create a simulator
         id: sim
         run: |
@@ -81,19 +104,42 @@ jobs:
               return json.loads(subprocess.check_output(["xcrun", "simctl", "list", "-j", *a]))
           rts = [r for r in j("runtimes")["runtimes"]
                  if r.get("isAvailable") and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-27")]
-          rts.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
-          rt = rts[-1]
-          supported = rt.get("supportedDeviceTypes") or j("devicetypes")["devicetypes"]
-          phones = [d for d in supported if d["name"].startswith("iPhone")]
-          duo = [d for d in phones if "Duo" in d["name"]]
-          dt = (duo or phones)[-1]
+          rts.sort(key=lambda r: [int(x) for x in r["version"].split(".")], reverse=True)
+          alltypes = j("devicetypes")["devicetypes"]
+          pick = None
+          # Prefer an iPhone Duo on the newest runtime that supports it.
+          for rt in rts:
+              supported = rt.get("supportedDeviceTypes") or alltypes
+              duo = [d for d in supported if "iPhone-Duo" in d["identifier"] or "Duo" in d["name"]]
+              if duo:
+                  pick = (rt, duo[-1])
+                  break
+          # Otherwise the newest iPhone on the newest runtime.
+          if pick is None:
+              rt = rts[0]
+              supported = rt.get("supportedDeviceTypes") or alltypes
+              phones = [d for d in supported if d["name"].startswith("iPhone")]
+              newest = max(phones, key=lambda d: (d.get("minRuntimeVersion", 0), alltypes.index(d) if d in alltypes else -1))
+              pick = (rt, newest)
+          rt, dt = pick
           print(rt["identifier"], dt["identifier"], dt["name"].replace(" ", "_"))
           PY
           )
           echo "Runtime: $RUNTIME"
           echo "Device type: $DEVTYPE ($DEVNAME)"
-          UDID=$(xcrun simctl create "DuoSketch-CI" "$DEVTYPE" "$RUNTIME")
+          if ! UDID=$(xcrun simctl create "DuoSketch-CI" "$DEVTYPE" "$RUNTIME"); then
+            echo "::warning::Could not create $DEVNAME on $RUNTIME. Falling back to a standard iPhone."
+            read -r DEVTYPE DEVNAME < <(xcrun simctl list -j runtimes | python3 -c '
+          import json, sys
+          rt = [r for r in json.load(sys.stdin)["runtimes"] if r["identifier"] == sys.argv[1]][0]
+          ph = [d for d in rt["supportedDeviceTypes"] if d["name"].startswith("iPhone") and "Duo" not in d["name"]]
+          p = max(ph, key=lambda d: d.get("minRuntimeVersion", 0))
+          print(p["identifier"], p["name"].replace(" ", "_"))' "$RUNTIME")
+            echo "Device type: $DEVTYPE ($DEVNAME)"
+            UDID=$(xcrun simctl create "DuoSketch-CI" "$DEVTYPE" "$RUNTIME")
+          fi
           echo "Created simulator $UDID"
+          echo "::notice::Tests run on $DEVNAME, runtime $RUNTIME"
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
 
       - name: Build and test app
