@@ -118,4 +118,12 @@ final class DuoSketchTests: XCTestCase {
         sketch.fade(by: 0.2)
         XCTAssertNotEqual(after, SettledInkLayer(sketch: sketch, split: sketch.inkSplit()))
     }
+
+    /// The app has one model for the whole process, so it must not allow a
+    /// second scene: two boards would share one drawing, fade twice per shake
+    /// and fight over the canvas size.
+    func testInfoPlistDisallowsMultipleScenes() throws {
+        let manifest = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest") as? [String: Any])
+        XCTAssertEqual(manifest["UIApplicationSupportsMultipleScenes"] as? Bool, false)
+    }
 }
