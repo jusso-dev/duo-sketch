@@ -36,7 +36,7 @@ private struct HingeFeed: ViewModifier {
 
 extension View {
     /// Feeds hinge changes into `service` on iOS 27.1 and later.
-    /// On earlier systems there is no hinge, so the service stays `.unknown`.
+    /// On earlier systems there is no hinge, so the service stays `.unavailable`.
     @ViewBuilder
     func feedingHinge(into service: HingeFoldStateService) -> some View {
         if #available(iOS 27.1, *) {
