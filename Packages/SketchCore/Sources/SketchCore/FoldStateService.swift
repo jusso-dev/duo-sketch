@@ -1,9 +1,10 @@
 // Fold state seam for Duo Sketch.
 //
 // Everything about the hinge lives in this one file. The shape matches the
-// shared Duo app contract (FoldPosture, FoldStateService with `current` and
-// `updates`, StaticFoldStateService, MockFoldStateService with send/play,
-// HingeReading with status and angleDegrees) so the three apps stay aligned.
+// shared Duo app contract used by jusso-dev/duo-fortune-ball and
+// jusso-dev/duo-pocket-pet: FoldPosture, FoldStateService with `current` and
+// `updates` (current first, then changes), UnavailableFoldStateService, and
+// MockFoldStateService(initial:) with send/play/history/openingScript.
 //
 // On device, the app feeds readings from Apple's public SwiftUI hinge API
 // (iOS 27.1) into `HingeFoldStateService`:
@@ -22,7 +23,7 @@
 import Synchronization
 
 /// The pose of the device, as far as the app cares.
-public enum FoldPosture: Sendable, Equatable, CustomStringConvertible {
+public enum FoldPosture: Equatable, Hashable, Sendable, CustomStringConvertible {
     /// Folded shut. The app is on the outer display.
     case closed
     /// Partly open. Hinge angle in degrees, 0 closed to 180 flat.
@@ -31,6 +32,22 @@ public enum FoldPosture: Sendable, Equatable, CustomStringConvertible {
     case open
     /// No hinge (any other iPhone, or iOS earlier than 27.1). Use the standard layout.
     case unavailable
+
+    /// True when the device reports a hinge at all.
+    public var hasHinge: Bool { self != .unavailable }
+
+    /// How far open the device is, from 0 (closed) to 1 (open).
+    public func openFraction(fullOpenDegrees: Double = 180) -> Double {
+        switch self {
+        case .closed:
+            return 0
+        case .open, .unavailable:
+            return 1
+        case .partiallyOpen(let degrees):
+            guard fullOpenDegrees > 0, degrees.isFinite else { return 0 }
+            return min(max(degrees / fullOpenDegrees, 0), 1)
+        }
+    }
 
     public var isClosed: Bool { self == .closed }
     public var isOpen: Bool { self == .open }
@@ -101,9 +118,8 @@ extension FoldPosture {
 
 /// Source of fold posture.
 ///
-/// `updates` returns a new stream on every access. Each stream delivers the
-/// changes that happen after it was created (not the current value), so read
-/// `current` first. Duplicate postures are never delivered.
+/// `updates` returns a new stream on every access. It yields `current` first,
+/// then every change. Duplicate postures are never delivered.
 public protocol FoldStateService: AnyObject, Sendable {
     var current: FoldPosture { get }
     var updates: AsyncStream<FoldPosture> { get }
@@ -142,6 +158,7 @@ public final class FoldBroadcaster: Sendable {
                 let id = s.nextID
                 s.nextID += 1
                 s.continuations[id] = continuation
+                continuation.yield(s.current)
                 return id
             }
             continuation.onTermination = { [weak self] _ in
@@ -208,35 +225,60 @@ public final class StaticFoldStateService: FoldStateService {
     }
 
     public var updates: AsyncStream<FoldPosture> {
-        AsyncStream { $0.finish() }
+        let posture = current
+        return AsyncStream { continuation in
+            continuation.yield(posture)
+            continuation.finish()
+        }
     }
 }
+
+/// The fallback for iPhones without a hinge. Always `.unavailable`.
+/// Same name as in the sibling apps.
+public typealias UnavailableFoldStateService = StaticFoldStateService
 
 /// Scriptable service for tests, SwiftUI previews and the simulator debug menu.
 public final class MockFoldStateService: FoldStateService {
     private let broadcaster: FoldBroadcaster
+    private let log: Mutex<[FoldPosture]>
 
-    public init(_ initial: FoldPosture = .open) {
+    public init(initial: FoldPosture = .closed) {
         broadcaster = FoldBroadcaster(initial: initial)
+        log = Mutex([initial])
     }
+
+    /// Every posture sent, in order, including the initial one.
+    public var history: [FoldPosture] { log.withLock { $0 } }
+
+    /// A typical open gesture: closed, a few partial angles, then open.
+    public static let openingScript: [FoldPosture] = [
+        .closed,
+        .partiallyOpen(angleDegrees: 30),
+        .partiallyOpen(angleDegrees: 90),
+        .partiallyOpen(angleDegrees: 150),
+        .open
+    ]
 
     public var current: FoldPosture { broadcaster.current }
     public var updates: AsyncStream<FoldPosture> { broadcaster.stream() }
     public var subscriberCount: Int { broadcaster.subscriberCount }
 
-    /// Sets the posture now.
-    public func send(_ posture: FoldPosture) {
-        broadcaster.publish(posture)
+    /// Sets the posture now. Returns false when it equals the current one.
+    @discardableResult
+    public func send(_ posture: FoldPosture) -> Bool {
+        let changed = broadcaster.publish(posture)
+        if changed { log.withLock { $0.append(posture) } }
+        return changed
     }
 
     /// Sets the posture from a hinge reading, as the real service would.
     public func send(reading: HingeReading?) {
-        broadcaster.publish(FoldPosture(reading: reading))
+        send(FoldPosture(reading: reading))
     }
 
     /// Plays a sequence of postures in order.
     public func play(_ postures: [FoldPosture]) {
-        postures.forEach { broadcaster.publish($0) }
+        postures.forEach { send($0) }
     }
 
     /// Common gesture: close the phone and open it again.

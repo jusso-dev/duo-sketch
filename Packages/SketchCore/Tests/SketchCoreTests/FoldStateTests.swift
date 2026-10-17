@@ -27,7 +27,7 @@ final class FoldStateTests: XCTestCase {
     }
 
     func testMockFansOutToTwoSubscribersAndSkipsDuplicates() async {
-        let mock = MockFoldStateService(.open)
+        let mock = MockFoldStateService(initial: .open)
         let a = mock.updates
         let b = mock.updates
         XCTAssertEqual(mock.subscriberCount, 2)
@@ -38,11 +38,12 @@ final class FoldStateTests: XCTestCase {
         for await p in a { seenA.append(p) }
         var seenB: [FoldPosture] = []
         for await p in b { seenB.append(p) }
-        let expected: [FoldPosture] = [.partiallyOpen(angleDegrees: 60), .closed, .partiallyOpen(angleDegrees: 60), .open]
-        XCTAssertEqual(seenA, expected)
+        let expected: [FoldPosture] = [.open, .partiallyOpen(angleDegrees: 60), .closed, .partiallyOpen(angleDegrees: 60), .open]
+        XCTAssertEqual(seenA, expected, "current first, then changes")
         XCTAssertEqual(seenB, expected)
         XCTAssertEqual(mock.current, .open)
         XCTAssertEqual(mock.subscriberCount, 0)
+        XCTAssertEqual(mock.history, expected)
     }
 
     func testCancelledStreamUnsubscribes() async {
@@ -70,18 +71,30 @@ final class FoldStateTests: XCTestCase {
         var seen: [FoldPosture] = []
         for await p in stream {
             seen.append(p)
-            if seen.count == 4 { break }
+            if seen.count == 5 { break }
         }
-        XCTAssertEqual(seen, [.partiallyOpen(angleDegrees: 120), .partiallyOpen(angleDegrees: 123), .open, .unavailable])
+        XCTAssertEqual(seen, [.unavailable, .partiallyOpen(angleDegrees: 120), .partiallyOpen(angleDegrees: 123), .open, .unavailable])
     }
 
     func testStaticService() async {
-        let service = StaticFoldStateService()
+        let service = UnavailableFoldStateService()
         XCTAssertFalse(service.isHingeAvailable)
         XCTAssertEqual(service.current, .unavailable)
-        var count = 0
-        for await _ in service.updates { count += 1 }
-        XCTAssertEqual(count, 0)
+        var seen: [FoldPosture] = []
+        for await p in service.updates { seen.append(p) }
+        XCTAssertEqual(seen, [.unavailable])
+    }
+
+    func testOpeningScriptAndOpenFraction() {
+        let mock = MockFoldStateService()
+        XCTAssertEqual(mock.current, .closed)
+        mock.play(MockFoldStateService.openingScript)
+        XCTAssertEqual(mock.history, MockFoldStateService.openingScript)
+        XCTAssertEqual(FoldPosture.partiallyOpen(angleDegrees: 90).openFraction(), 0.5)
+        XCTAssertEqual(FoldPosture.closed.openFraction(), 0)
+        XCTAssertEqual(FoldPosture.unavailable.openFraction(), 1)
+        XCTAssertFalse(FoldPosture.unavailable.hasHinge)
+        XCTAssertFalse(mock.send(.open), "duplicate")
     }
 
     func testMockReading() {

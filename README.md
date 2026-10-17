@@ -19,7 +19,7 @@ iPhone Duo has a 5.4 inch outer display and a 7.6 inch inner display that folds.
 | Open (inner display) | Full board: large canvas with both dials along the bottom edge. |
 | Half open | Easel mode: the canvas sits on the upper half and the dials sit on the lower half, like a little desk toy. |
 | Closed (outer display) | Compact board on the outer display. Your drawing carries over. |
-| Closed, then opened again | The board shakes and clears, ready for a new drawing. |
+| Closed, then opened again (partly or fully) | The board shakes and clears, ready for a new drawing. |
 
 Hinge data comes from Apple's public SwiftUI API in iOS 27.1, wrapped behind our own `FoldStateService` protocol so the core logic stays testable:
 
