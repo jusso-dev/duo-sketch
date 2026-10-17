@@ -10,6 +10,7 @@ struct BoardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.frameTheme) private var theme
     @AppStorage(SettingsKeys.externalPreview) private var externalPreview = true
+    @AppStorage(SettingsKeys.hapticsEnabled) private var hapticsEnabled = true
 
     private var layout: BoardLayout {
         BoardLayout.choose(
@@ -25,7 +26,7 @@ struct BoardView: View {
                 .padding(layout == .wide ? 28 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(theme.bodyShade.ignoresSafeArea())
-                .toolbar { toolbar }
+                .boardToolbar(model: model)
                 .toolbarBackground(theme.bodyShade, for: .navigationBar)
                 .navigationBarTitleDisplayMode(.inline)
         }
@@ -33,6 +34,7 @@ struct BoardView: View {
             if LaunchOptions.foldDebug { FoldDebugOverlay(model: model) }
         }
         .externalDisplayPreview(model: model, isEnabled: $externalPreview)
+        .task(id: hapticsEnabled) { model.hapticsEnabled = hapticsEnabled }
         .task { await model.observeFold() }
         .onDeviceShake { model.deviceShaken() }
     }
@@ -71,51 +73,97 @@ struct BoardView: View {
         LaunchOptions.holdShake && model.clearController.isShaking ? LaunchOptions.heldShakeOffset : animated
     }
 
-    @ViewBuilder
+    /// Lays the board out in the space it has, clear of iPhone Duo's reserved
+    /// regions. With the fold active the canvas and dials go either side of it
+    /// (see `FoldAwareLayout`); otherwise the size class layout is used, trimmed
+    /// away from any camera.
     private var arranged: some View {
-        switch layout {
-        case .portrait:
-            VStack(spacing: 16) {
-                surface
-                HStack {
-                    DialView(axis: .horizontal, model: model)
-                    Spacer()
-                    brand
-                    Spacer()
-                    DialView(axis: .vertical, model: model)
+        GeometryReader { proxy in
+            let bounds = LayoutRect(x: 0, y: 0, width: proxy.size.width, height: proxy.size.height)
+            let regions = ReservedRegions(proxy)
+            let safe = FoldAwareLayout.avoiding(bounds, occlusions: regions.occlusions)
+            ZStack(alignment: .topLeading) {
+                if let split = regions.divisions.lazy.compactMap({ FoldAwareLayout.split(safe, around: $0) }).first {
+                    foldSplit(split)
+                } else {
+                    standard(in: safe)
+                        .frame(width: safe.width, height: safe.height)
+                        .position(x: safe.midX, y: safe.midY)
+                }
+                if LaunchOptions.foldDebug {
+                    ReservedRegionOutlines(regions: regions)
                 }
             }
-        case .wide:
-            VStack(spacing: 24) {
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+    }
+
+    /// The board split by the fold: canvas on the top or leading side, dials on
+    /// the bottom or trailing side, nothing in the fold itself.
+    @ViewBuilder
+    private func foldSplit(_ split: FoldAwareLayout.Split) -> some View {
+        let diameter = FoldAwareLayout.dialDiameter(for: split)
+        surface
+            .padding(8)
+            .frame(width: split.canvas.width, height: split.canvas.height)
+            .position(x: split.canvas.midX, y: split.canvas.midY)
+        dialStrip(axis: split.axis, diameter: diameter)
+            .padding(8)
+            .frame(width: split.controls.width, height: split.controls.height)
+            .position(x: split.controls.midX, y: split.controls.midY)
+    }
+
+    /// The size class layouts, with dials sized to the space rather than to
+    /// any one screen.
+    @ViewBuilder
+    private func standard(in rect: LayoutRect) -> some View {
+        let diameter = FoldAwareLayout.dialDiameter(width: rect.width, height: rect.height)
+        switch layout {
+        case .portrait, .wide:
+            VStack(spacing: layout == .wide ? 24 : 16) {
                 surface
-                HStack {
-                    DialView(axis: .horizontal, model: model, diameter: 124)
-                    Spacer()
-                    brand
-                    Spacer()
-                    DialView(axis: .vertical, model: model, diameter: 124)
-                }
+                dialStrip(axis: .vertical, diameter: diameter)
             }
         case .landscape:
             HStack(spacing: 16) {
-                DialView(axis: .horizontal, model: model)
+                DialView(axis: .horizontal, model: model, diameter: diameter)
                 surface
-                DialView(axis: .vertical, model: model)
+                DialView(axis: .vertical, model: model, diameter: diameter)
             }
         case .easel:
+            // Partly open, but no fold geometry to place things by (iOS before
+            // 27.1, or a posture fixed with -foldPosture). Split by halves.
             VStack(spacing: 0) {
                 surface
                     .frame(maxHeight: .infinity)
                     .padding(.bottom, 20)
-                HStack {
-                    DialView(axis: .horizontal, model: model, diameter: 110)
-                    Spacer()
-                    brand
-                    Spacer()
-                    DialView(axis: .vertical, model: model, diameter: 110)
-                }
-                .frame(maxHeight: .infinity)
-                .padding(.top, 20)
+                dialStrip(axis: .vertical, diameter: diameter)
+                    .frame(maxHeight: .infinity)
+                    .padding(.top, 20)
+            }
+        }
+    }
+
+    /// Both dials with the wordmark between them: a row under a canvas, or a
+    /// column beside one.
+    @ViewBuilder
+    private func dialStrip(axis: FoldAwareLayout.Axis, diameter: Double) -> some View {
+        switch axis {
+        case .vertical:
+            HStack {
+                DialView(axis: .horizontal, model: model, diameter: diameter)
+                Spacer()
+                brand
+                Spacer()
+                DialView(axis: .vertical, model: model, diameter: diameter)
+            }
+        case .horizontal:
+            VStack {
+                DialView(axis: .horizontal, model: model, diameter: diameter)
+                Spacer()
+                brand
+                Spacer()
+                DialView(axis: .vertical, model: model, diameter: diameter)
             }
         }
     }
@@ -155,21 +203,6 @@ struct BoardView: View {
             .tracking(1.5)
             .foregroundStyle(theme.label) // 4.5:1 or better on the body, tested per palette
             .accessibilityHidden(true)
-    }
-
-    // The toolbar buttons and the canvas are separate views that read
-    // `model.sketch` themselves, so a pen move re-runs only them and not the
-    // whole board.
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarLeading) {
-            ClearButton(model: model)
-            ReplayButton(model: model)
-        }
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            SettingsMenu(model: model)
-            ShareButton(model: model)
-        }
     }
 }
 
@@ -287,32 +320,70 @@ private struct ShareButton: View {
 
 /// In-app settings. The Haptics toggle covers every haptic in the app (dial
 /// ticks, edge bumps and the clear pattern); they also follow the system setting.
-private struct SettingsMenu: View {
-    let model: SketchViewModel
+private struct SettingsItems: View {
     @AppStorage(SettingsKeys.hapticsEnabled) private var hapticsEnabled = true
     @AppStorage(SettingsKeys.frameTheme) private var frameTheme = FramePalette.ID.eucalyptus
     @AppStorage(SettingsKeys.externalPreview) private var externalPreview = true
 
     var body: some View {
-        Menu {
-            Toggle(isOn: $hapticsEnabled) {
-                Label("Haptics", systemImage: "hand.tap")
-            }
-            Picker(selection: $frameTheme) {
-                ForEach(FramePalette.all) { palette in
-                    Text(palette.name).tag(palette.id)
-                }
-            } label: {
-                Label("Frame", systemImage: "paintpalette")
-            }
-            .pickerStyle(.menu)
-            Toggle(isOn: $externalPreview) {
-                Label("Preview on external display", systemImage: "tv")
+        Toggle(isOn: $hapticsEnabled) {
+            Label("Haptics", systemImage: "hand.tap")
+        }
+        Picker(selection: $frameTheme) {
+            ForEach(FramePalette.all) { palette in
+                Text(palette.name).tag(palette.id)
             }
         } label: {
-            Label("Settings", systemImage: "gearshape")
+            Label("Frame", systemImage: "paintpalette")
         }
-        .task(id: hapticsEnabled) { model.hapticsEnabled = hapticsEnabled }
+        .pickerStyle(.menu)
+        Toggle(isOn: $externalPreview) {
+            Label("Preview on external display", systemImage: "tv")
+        }
+    }
+}
+
+extension View {
+    /// The board's toolbar. Every item has an icon and a title, so iPhone Duo
+    /// can show it in a horizontal bar, a vertical bar on the side of the
+    /// display, or the overflow menu. On iOS 27 and later, Clear and Share keep
+    /// their place when space is short and the settings live in the overflow
+    /// menu, as Apple suggests for less frequently used controls.
+    @ViewBuilder
+    func boardToolbar(model: SketchViewModel) -> some View {
+        if #available(iOS 27.0, *) {
+            toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    ClearButton(model: model)
+                }
+                .visibilityPriority(.high)
+                ToolbarItem(placement: .topBarLeading) {
+                    ReplayButton(model: model)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareButton(model: model)
+                }
+                .visibilityPriority(.high)
+                ToolbarOverflowMenu {
+                    SettingsItems()
+                }
+            }
+        } else {
+            toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    ClearButton(model: model)
+                    ReplayButton(model: model)
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Menu {
+                        SettingsItems()
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    ShareButton(model: model)
+                }
+            }
+        }
     }
 }
 

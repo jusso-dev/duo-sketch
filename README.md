@@ -17,7 +17,7 @@ iPhone Duo has a 5.4 inch outer display and a 7.6 inch inner display that folds.
 | Pose | What happens |
 | --- | --- |
 | Open (inner display) | Full board: large canvas with both dials along the bottom edge. |
-| Half open (20 to 160 degrees) | Easel mode: the canvas sits on the upper half and the dials sit on the lower half, like a little desk toy. |
+| Half open (20 to 160 degrees) | Easel mode: the board splits at the fold. Seated like a laptop, the canvas sits on the upright half and the dials on the half resting on the table. Held like a book, the canvas is on the leading side and the dials on the trailing side. Nothing sits in the fold. |
 | Closed (outer display) | Compact board on the outer display. Your drawing carries over. |
 | Closed for at least 0.4 s, then opened again to 20 degrees or more | The board shakes and clears, ready for a new drawing. For a few seconds afterwards, Undo clear in the toolbar brings the drawing back. A hinge settling by a degree or two after closing doesn't count as opening. |
 
@@ -28,7 +28,7 @@ Hinge data comes from Apple's public SwiftUI API in iOS 27.1, wrapped behind our
 - [`View.onHingeChange(isEnabled:_:)`](https://developer.apple.com/documentation/swiftui/view/onhingechange(isenabled:_:))
 - [Prepare your app for iPhone Duo](https://developer.apple.com/videos/play/tech-talks/111461/) and [Leverage multiple displays and scenes on iPhone Duo](https://developer.apple.com/videos/play/tech-talks/111464/) (Apple Tech Talks)
 
-Apple recommends hinge data for live effects and size classes for layout, so the layout itself follows size classes and the hinge only drives the clear gesture and easel mode.
+Apple recommends hinge data for live effects and size classes and reserved regions for layout. So the layout follows size classes, and when the phone is partly open it places the canvas and dials either side of the fold using the fold's reserved region (`GeometryProxy.reservedRegions(kind: .division)`, iOS 27.1). The board is also trimmed away from camera occlusions. The hinge itself only drives the clear gesture.
 
 ## On other iPhones
 

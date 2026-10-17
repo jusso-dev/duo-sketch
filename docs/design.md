@@ -69,6 +69,18 @@ Layout is chosen by `BoardLayout` in SketchCore from size classes and fold postu
 - `wide`: larger canvas and dials (iPhone Duo inner display)
 - `easel`: canvas on the upper half and dials on the lower half (iPhone Duo partly open)
 
+Dial size follows the space the board has (a quarter of its shorter side, from 88 pt to 132 pt), not any one screen.
+
+## iPhone Duo guidelines
+
+The board follows Apple's guidance in [Preparing your app for iPhone Duo](https://developer.apple.com/documentation/technologyoverviews/preparing-your-app-for-iphone-duo) and the Design for iPhone Duo tech talk:
+
+- **The fold.** When the phone is partly open, the fold is a *division* reserved region. `FoldAwareLayout` in SketchCore splits the board around it, so no dial or canvas sits in the curve. With the fold across the display, the canvas goes on the upright half and the dials on the half resting on the table, where they are steady and in reach. With the fold down the middle, the dials go on the trailing side. Every control stays available in every pose.
+- **Cameras.** Camera *occlusion* regions are trimmed off the board along whichever edge loses least.
+- **Bars.** The toolbar uses `NavigationStack` toolbar items with an icon and a title each, so the system can show them across the top, down the side of the outer display, or in the overflow menu. On iOS 27, Clear and Share have high visibility priority and the settings live in the overflow menu.
+- **Sizes.** Nothing is laid out against fixed screen sizes. Dials scale with their space and never drop below 88 pt, well over the 44 pt minimum touch target.
+- **Checking.** Launch with `-foldDebug` to see the posture, the hinge angle and outlines of the reserved regions (yellow for the fold, cyan for cameras).
+
 ## App icon
 
 The icon shows two paper panels of a folding phone, open like a book on a deep blue-teal ground, with one brass line that runs across the hinge. `scripts/make_app_icon.py` draws it. Like the frame, it has no red and borrows nothing from existing toys.
