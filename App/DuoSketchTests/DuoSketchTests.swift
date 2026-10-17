@@ -15,14 +15,61 @@ final class DuoSketchTests: XCTestCase {
         XCTAssertFalse(model.sketch.isEmpty)
     }
 
+    // These used to sleep 450 ms and 800 ms of real time against 0.4 s and
+    // 0.6 s thresholds, which could flake on a busy hosted runner. They now
+    // use an injected clock and sleep, so they don't wait at all.
+
     func testCloseAndReopenStartsShakeClear() async {
-        let mock = MockFoldStateService(initial: .open)
-        let model = SketchViewModel(foldService: mock, sketch: DemoDrawings.spiral())
+        var now = 0.0
+        let model = SketchViewModel(
+            foldService: MockFoldStateService(initial: .open),
+            sketch: DemoDrawings.spiral(),
+            clock: { now },
+            sleep: { _ in }
+        )
         model.handle(.closed)
-        try? await Task.sleep(for: .milliseconds(450))
+        now = 0.45
         model.handle(.open)
         XCTAssertEqual(model.shakeTrigger, 1)
-        try? await Task.sleep(for: .milliseconds(800))
+        await model.shakeTask?.value
+        XCTAssertTrue(model.sketch.isEmpty)
+    }
+
+    func testQuickCloseAndReopenDoesNotClear() {
+        var now = 0.0
+        let model = SketchViewModel(
+            foldService: MockFoldStateService(initial: .open),
+            sketch: DemoDrawings.spiral(),
+            clock: { now },
+            sleep: { _ in }
+        )
+        model.handle(.closed)
+        now = 0.3
+        model.handle(.open)
+        XCTAssertEqual(model.shakeTrigger, 0, "closed for under 0.4 s")
+        XCTAssertFalse(model.sketch.isEmpty)
+    }
+
+    /// End to end through the fold service, as the app runs it.
+    func testFoldServiceUpdatesDriveTheClear() async {
+        let mock = MockFoldStateService(initial: .open)
+        var now = 0.0
+        let model = SketchViewModel(
+            foldService: mock,
+            sketch: DemoDrawings.spiral(),
+            clock: { now += 0.5; return now },
+            sleep: { _ in }
+        )
+        let observing = Task { await model.observeFold() }
+        for _ in 0..<5 { await Task.yield() }
+        XCTAssertEqual(mock.subscriberCount, 1)
+        mock.send(.closed)
+        mock.send(.open)
+        mock.finish()
+        await observing.value
+        XCTAssertEqual(model.posture, .open)
+        XCTAssertEqual(model.shakeTrigger, 1)
+        await model.shakeTask?.value
         XCTAssertTrue(model.sketch.isEmpty)
     }
 
