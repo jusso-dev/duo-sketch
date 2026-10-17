@@ -8,6 +8,9 @@ struct DialView: View {
     var diameter: CGFloat = 92
 
     @State private var isTurning = false
+    /// True while a finger is down. Unlike `onEnded`, this also resets when the
+    /// system cancels the gesture (Notification Centre, a call, an edge swipe).
+    @GestureState private var isTouching = false
 
     var body: some View {
         let dial = model.dial(axis)
@@ -36,6 +39,12 @@ struct DialView: View {
         .frame(width: diameter, height: diameter)
         .contentShape(Circle())
         .gesture(turnGesture)
+        .onChange(of: isTouching) { _, touching in
+            if !touching, isTurning {
+                isTurning = false
+                model.endTurn(axis)
+            }
+        }
         .accessibilityElement()
         .accessibilityLabel(axis == .horizontal ? "Across dial" : "Up and down dial")
         .accessibilityHint("Swipe up or down to draw")
@@ -63,6 +72,7 @@ struct DialView: View {
 
     private var turnGesture: some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .updating($isTouching) { _, touching, _ in touching = true }
             .onChanged { value in
                 if !isTurning {
                     isTurning = true

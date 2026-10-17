@@ -100,6 +100,7 @@ final class DialTests: XCTestCase {
         var dial = Dial()
         let r = 46.0
         XCTAssertEqual(dial.drag(touchX: 40, y: 0, radius: r), .none, "first touch primes")
+        XCTAssertGreaterThan(dial.drag(touchX: 28, y: 28, radius: r).degrees, 0, "eighth turn clockwise")
         XCTAssertGreaterThan(dial.drag(touchX: 0, y: 40, radius: r).degrees, 0, "quarter turn clockwise")
         let before = dial.totalDegrees
         XCTAssertEqual(dial.drag(touchX: 1, y: 1, radius: r), .none, "into the dead zone")
@@ -116,5 +117,31 @@ final class DialTests: XCTestCase {
         XCTAssertEqual(dial.drag(touchX: edge - 0.01, y: 0, radius: r), .none)
         _ = dial.drag(touchX: edge, y: 0, radius: r)
         XCTAssertNotEqual(dial.drag(touchX: 0, y: edge, radius: r), .none, "on the boundary counts as outside")
+    }
+
+    // MARK: Cancelled drag (SK-2)
+
+    func testTouchFarFromTheLastOneStartsAFreshTurn() {
+        var dial = Dial()
+        let r = 46.0
+        _ = dial.drag(touchX: 40, y: 0, radius: r)
+        _ = dial.drag(touchX: 38, y: 10, radius: r)
+        let before = dial.totalDegrees
+        // The drag was cancelled (no end()), then a new touch lands on the opposite side.
+        XCTAssertEqual(dial.drag(touchX: -38, y: -10, radius: r), .none, "no half-turn jump")
+        XCTAssertEqual(dial.totalDegrees, before)
+        XCTAssertNotEqual(dial.drag(touchX: -36, y: -16, radius: r), .none, "turning carries on from there")
+    }
+
+    func testNormalDragStepsStillTurn() {
+        var dial = Dial()
+        let r = 46.0
+        _ = dial.drag(touchX: 40, y: 0, radius: r)
+        var total = 0.0
+        for i in 1...9 {
+            let a = Double(i) * 10 * .pi / 180
+            total += dial.drag(touchX: 40 * cos(a), y: 40 * sin(a), radius: r).degrees
+        }
+        XCTAssertEqual(total, 90, accuracy: 1e-9)
     }
 }

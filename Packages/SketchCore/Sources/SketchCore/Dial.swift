@@ -35,6 +35,8 @@ public struct Dial: Sendable, Equatable {
     /// Total rotation since creation, in degrees. Positive is clockwise.
     public private(set) var totalDegrees: Double = 0
     private var lastAngle: Double?
+    /// Last touch position fed to `drag(touchX:y:radius:)`, relative to the centre.
+    private var lastTouch: Point?
 
     public init(config: DialConfig = .standard) {
         self.config = config
@@ -72,15 +74,27 @@ public struct Dial: Sendable, Equatable {
     /// turn from wherever the finger comes out instead of jumping to it.
     public mutating func drag(touchX x: Double, y: Double, radius: Double) -> DialStep {
         guard x.isFinite, y.isFinite, radius > 0 else { return .none }
+        defer { lastTouch = Point(x: x, y: y) }
         guard (x * x + y * y).squareRoot() >= radius * Dial.deadZoneFraction else {
             lastAngle = nil
             return .none
+        }
+        // A real drag moves a little between samples. A touch that lands more
+        // than a radius away from the last one is a new touch whose start we
+        // missed (the old drag was cancelled without an end), so start afresh
+        // instead of jumping the pen by up to half a turn.
+        if let last = lastTouch {
+            let dx = x - last.x, dy = y - last.y
+            if (dx * dx + dy * dy).squareRoot() > radius {
+                lastAngle = nil
+            }
         }
         return drag(to: atan2(y, x) * 180 / .pi)
     }
 
     public mutating func end() {
         lastAngle = nil
+        lastTouch = nil
     }
 
     public mutating func rotate(by degrees: Double) -> DialStep {
