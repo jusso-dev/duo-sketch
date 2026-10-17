@@ -1,0 +1,58 @@
+name: DuoSketch
+options:
+  bundleIdPrefix: dev.jusso
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+packages:
+  SketchCore:
+    path: ../Packages/SketchCore
+targets:
+  DuoSketch:
+    type: application
+    platform: iOS
+    sources:
+      - DuoSketch
+    dependencies:
+      - package: SketchCore
+    info:
+      path: DuoSketch/Info.plist
+      properties:
+        CFBundleDisplayName: Duo Sketch
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiresFullScreen: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.jusso.duosketch
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: false
+  DuoSketchTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - DuoSketchTests
+    dependencies:
+      - target: DuoSketch
+      - package: SketchCore
+schemes:
+  DuoSketch:
+    build:
+      targets:
+        DuoSketch: all
+        DuoSketchTests: [test]
+    test:
+      targets:
+        - DuoSketchTests
