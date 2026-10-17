@@ -4,7 +4,7 @@ A two-dial drawing toy for iPhone, built to make the most of iPhone Duo.
 
 Turn the left dial to draw across, turn the right dial to draw up and down, and use both together for diagonals and curves. When you want a fresh page, fold the phone shut and open it again: the board gives a little shake and the drawing is gone. On any other iPhone, shake the phone instead.
 
-Status: early development. The drawing engine and fold logic are in `Packages/SketchCore` and tested on Linux. The SwiftUI app lives in `App/` and still needs its first build on a Mac. Design notes are in [docs/design.md](docs/design.md).
+Status: early development. The drawing engine and fold logic are in `Packages/SketchCore` and tested on Linux. The SwiftUI app lives in `App/`. CI builds it and runs its tests on a hosted macOS runner for every pull request (`.github/workflows/ios.yml`), but it hasn't been tried on a real iPhone Duo yet. Design notes are in [docs/design.md](docs/design.md).
 
 ## Original design
 
@@ -17,9 +17,9 @@ iPhone Duo has a 5.4 inch outer display and a 7.6 inch inner display that folds.
 | Pose | What happens |
 | --- | --- |
 | Open (inner display) | Full board: large canvas with both dials along the bottom edge. |
-| Half open | Easel mode: the canvas sits on the upper half and the dials sit on the lower half, like a little desk toy. |
+| Half open (20 to 160 degrees) | Easel mode: the canvas sits on the upper half and the dials sit on the lower half, like a little desk toy. |
 | Closed (outer display) | Compact board on the outer display. Your drawing carries over. |
-| Closed, then opened again (partly or fully) | The board shakes and clears, ready for a new drawing. |
+| Closed for at least 0.4 s, then opened again to 20 degrees or more | The board shakes and clears, ready for a new drawing. For a few seconds afterwards, Undo clear in the toolbar brings the drawing back. A hinge settling by a degree or two after closing doesn't count as opening. |
 
 Hinge data comes from Apple's public SwiftUI API in iOS 27.1, wrapped behind our own `FoldStateService` protocol so the core logic stays testable:
 
@@ -36,8 +36,8 @@ Duo Sketch works on every iPhone that runs iOS 18 or later.
 
 - The layout adapts to the screen with size classes.
 - There is no hinge, so `DeviceHingeContext.hinge` is `nil` and the app uses the no-hinge fallback service.
-- Shake the phone to clear. Each shake fades the drawing a bit more, and three good shakes clear it completely.
-- There is also a Clear button in the toolbar for accessibility.
+- Shake the phone to clear. Each shake fades the drawing a bit more, and three good shakes clear it completely. Shakes less than half a second apart count once.
+- There is also a Clear button in the toolbar for accessibility, with a few seconds of Undo after it clears.
 
 ## Project layout
 
@@ -46,7 +46,8 @@ App/                      SwiftUI app (XcodeGen spec in App/project.yml)
   DuoSketch/              App sources
 Packages/SketchCore/      Pure Swift package: drawing model, dial mapping,
                           clear state machine, fold service protocol and mocks
-ci/workflows/             CI workflow, waiting to be moved to .github/workflows
+.github/workflows/ios.yml CI: SketchCore tests, then the app build and tests on
+                          an iOS 27 simulator (pull requests and pushes to main)
 ```
 
 ## Building
