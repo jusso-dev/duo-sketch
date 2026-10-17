@@ -156,8 +156,12 @@ public final class FoldBroadcaster: Sendable {
         state.withLock { $0.continuations.count }
     }
 
+    /// How many postures a subscriber that isn't reading keeps. Older ones are
+    /// dropped: only the latest posture matters. Matches the sibling apps.
+    public static let bufferSize = 16
+
     public func stream() -> AsyncStream<FoldPosture> {
-        AsyncStream(bufferingPolicy: .unbounded) { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(FoldBroadcaster.bufferSize)) { continuation in
             let id = state.withLock { s in
                 let id = s.nextID
                 s.nextID += 1
@@ -219,27 +223,37 @@ public final class HingeFoldStateService: FoldStateService {
     }
 }
 
-/// Fixed posture. Use `.unavailable` on every iPhone without a hinge, on iOS
-/// earlier than 27.1, and in previews.
+/// Fixed posture, for previews and tests that need a pose that never changes.
 public final class StaticFoldStateService: FoldStateService {
     public let current: FoldPosture
 
-    public init(_ posture: FoldPosture = .unavailable) {
+    public init(_ posture: FoldPosture) {
         current = posture
     }
 
     public var updates: AsyncStream<FoldPosture> {
         let posture = current
-        return AsyncStream { continuation in
+        return AsyncStream(bufferingPolicy: .bufferingNewest(FoldBroadcaster.bufferSize)) { continuation in
             continuation.yield(posture)
             continuation.finish()
         }
     }
 }
 
-/// The fallback for iPhones without a hinge. Always `.unavailable`.
-/// Same name as in the sibling apps.
-public typealias UnavailableFoldStateService = StaticFoldStateService
+/// The fallback for iPhones without a hinge and for iOS earlier than 27.1.
+/// Always `.unavailable`, so it takes no posture. Same name as in the sibling apps.
+public final class UnavailableFoldStateService: FoldStateService {
+    public init() {}
+
+    public var current: FoldPosture { .unavailable }
+
+    public var updates: AsyncStream<FoldPosture> {
+        AsyncStream(bufferingPolicy: .bufferingNewest(FoldBroadcaster.bufferSize)) { continuation in
+            continuation.yield(.unavailable)
+            continuation.finish()
+        }
+    }
+}
 
 /// Scriptable service for tests, SwiftUI previews and the simulator debug menu.
 public final class MockFoldStateService: FoldStateService {

@@ -22,7 +22,7 @@ struct DuoSketchApp: App {
                     let demo = LaunchOptions.demoSketch
                     // Demo launches don't touch the saved drawing.
                     let model = SketchViewModel(
-                        foldService: hinge,
+                        foldService: LaunchOptions.foldService ?? hinge,
                         sketch: demo ?? Sketch(),
                         store: demo == nil ? FileSketchStore.applicationSupport() : nil
                     )
@@ -38,15 +38,33 @@ struct DuoSketchApp: App {
 }
 
 /// Launch arguments for UI tests and screenshots.
-/// `-demoDrawing spiral` or `-demoDrawing hills`.
+/// - `-demoDrawing spiral`, `hills`, `skyline` or `blank`. Demo launches don't
+///   read or write the saved drawing.
+/// - `-foldPosture easel`, `open` or `closed` fixes the fold posture instead of
+///   reading the hinge, so easel mode can be shown on any simulator.
 enum LaunchOptions {
     static var demoSketch: Sketch? {
-        let args = ProcessInfo.processInfo.arguments
-        guard let i = args.firstIndex(of: "-demoDrawing"), i + 1 < args.count else { return nil }
-        switch args[i + 1] {
+        switch value(after: "-demoDrawing") {
         case "spiral": return DemoDrawings.spiral()
         case "hills": return DemoDrawings.hills()
+        case "skyline": return DemoDrawings.skyline()
+        case "blank": return Sketch()
         default: return nil
         }
+    }
+
+    static var foldService: (any FoldStateService)? {
+        switch value(after: "-foldPosture") {
+        case "easel": return StaticFoldStateService(.partiallyOpen(angleDegrees: 100))
+        case "open": return StaticFoldStateService(.open)
+        case "closed": return StaticFoldStateService(.closed)
+        default: return nil
+        }
+    }
+
+    private static func value(after flag: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return args[i + 1]
     }
 }

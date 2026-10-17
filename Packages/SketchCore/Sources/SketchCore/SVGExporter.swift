@@ -20,9 +20,13 @@ public enum SVGExporter {
         return out
     }
 
+    /// Two decimal places, and whole numbers without a decimal point.
+    /// Non-finite values become 0 so the document stays valid SVG.
     static func fmt(_ v: Double) -> String {
+        guard v.isFinite else { return "0" }
         let r = (v * 100).rounded() / 100
-        if r == r.rounded() { return String(Int(r)) }
+        guard r.isFinite else { return String(v) }
+        if r == r.rounded(), let whole = Int(exactly: r) { return String(whole) }
         return String(r)
     }
 

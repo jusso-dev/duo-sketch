@@ -36,7 +36,7 @@ struct DialView: View {
                 .rotationEffect(.degrees(dial.capAngle))
             Image(systemName: axis == .horizontal ? "arrow.left.and.right" : "arrow.up.and.down")
                 .font(.system(size: diameter * 0.16, weight: .semibold))
-                .foregroundStyle(Theme.bodyShade.opacity(0.8))
+                .foregroundStyle(Theme.bodyShade) // 3.8:1 on brass
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Circle())

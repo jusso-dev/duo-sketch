@@ -152,6 +152,65 @@ final class DuoSketchTests: XCTestCase {
         XCTAssertEqual(export.svgSize, CanvasSize(width: 1080, height: 540))
     }
 
+    /// "Share drawing only" is the drawing on its own: no eucalyptus card, so
+    /// the image is exactly the drawing's shape at `longSide`.
+    func testPlainExportHasNoFrame() throws {
+        let tall = CanvasSize(width: 300, height: 450)
+        let export = SketchExport(sketch: DemoDrawings.spiral(size: tall), canvasSize: tall, framed: false)
+        XCTAssertEqual(export.padding, 0)
+        let image = try XCTUnwrap(UIImage(data: try export.pngData()))
+        XCTAssertEqual(image.size.width * image.scale, 720, accuracy: 1)
+        XCTAssertEqual(image.size.height * image.scale, 1080, accuracy: 1)
+        // The SVG offered alongside is the same either way.
+        XCTAssertEqual(export.svgString(), SketchExport(sketch: export.sketch, canvasSize: tall).svgString())
+    }
+
+    /// Text and ink on the fixed palette stay readable in light and dark
+    /// appearance (4.5:1), and the dial arrow stays visible (3:1).
+    func testPaletteContrastInLightAndDark() {
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let traits = UITraitCollection(userInterfaceStyle: style)
+            func ratio(_ a: Color, _ b: Color) -> Double {
+                Self.contrast(UIColor(a).resolvedColor(with: traits), UIColor(b).resolvedColor(with: traits))
+            }
+            XCTAssertGreaterThanOrEqual(ratio(Theme.ink, Theme.surface), 4.5, "ink on sand, \(style)")
+            XCTAssertGreaterThanOrEqual(ratio(Theme.label, Theme.body), 4.5, "wordmark on body, \(style)")
+            XCTAssertGreaterThanOrEqual(ratio(Theme.label, Theme.bodyShade), 4.5, "wordmark on shade, \(style)")
+            XCTAssertGreaterThanOrEqual(ratio(Theme.bodyShade, Theme.brass), 3, "dial arrow, \(style)")
+        }
+    }
+
+    private static func contrast(_ a: UIColor, _ b: UIColor) -> Double {
+        func luminance(_ c: UIColor) -> Double {
+            var r: CGFloat = 0, g: CGFloat = 0, bl: CGFloat = 0, al: CGFloat = 0
+            c.getRed(&r, green: &g, blue: &bl, alpha: &al)
+            func lin(_ v: CGFloat) -> Double {
+                let v = Double(v)
+                return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(bl)
+        }
+        let (la, lb) = (luminance(a), luminance(b))
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+
+    /// Each device shake takes a third of the ink's opacity.
+    func testDeviceShakeFadesByAThirdEachTime() throws {
+        let model = SketchViewModel(foldService: UnavailableFoldStateService(), sketch: DemoDrawings.hills())
+        var spoken: [String] = []
+        model.announce = { spoken.append($0) }
+        model.deviceShaken()
+        XCTAssertEqual(try XCTUnwrap(model.sketch.strokes.first).opacity, 2.0 / 3, accuracy: 0.01)
+        model.deviceShaken()
+        XCTAssertEqual(try XCTUnwrap(model.sketch.strokes.first).opacity, 1.0 / 3, accuracy: 0.01)
+        model.deviceShaken()
+        XCTAssertTrue(model.sketch.isEmpty)
+        XCTAssertEqual(spoken, ["Drawing faded", "Drawing faded", "Board cleared"])
+        // Shaking an empty board says nothing.
+        model.deviceShaken()
+        XCTAssertEqual(spoken.count, 3)
+    }
+
     /// The settled ink layer must compare equal across ordinary pen moves, so
     /// SwiftUI keeps it instead of redrawing every point on every move.
     func testSettledInkLayerIsStableAcrossSmallMoves() {

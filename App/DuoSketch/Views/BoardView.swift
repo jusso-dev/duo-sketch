@@ -35,7 +35,7 @@ struct BoardView: View {
         arranged
             .padding(layout == .wide ? 24 : 16)
             .background(
-                RoundedRectangle(cornerRadius: Theme.frameCorner, style: .continuous)
+                Theme.frameShape
                     .fill(
                         LinearGradient(
                             colors: [Theme.bodyHighlight, Theme.body, Theme.bodyShade],
@@ -115,6 +115,23 @@ struct BoardView: View {
                 RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous)
                     .strokeBorder(Theme.bodyShade.opacity(0.6), lineWidth: 3)
             )
+            .overlay {
+                // Reduce Motion: the board doesn't shake. Instead the drawing
+                // cross fades to a blank surface while it clears.
+                Theme.surface
+                    .keyframeAnimator(initialValue: 0.0, trigger: model.shakeTrigger) { content, opacity in
+                        content.opacity(reduceMotion ? opacity : 0)
+                    } keyframes: { _ in
+                        KeyframeTrack {
+                            LinearKeyframe(1, duration: ClearController.shakeDuration)
+                            LinearKeyframe(1, duration: 0.15)
+                            LinearKeyframe(0, duration: 0.25)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
                 model.canvasSize = CanvasSize(width: size.width, height: size.height)
             }
@@ -124,7 +141,7 @@ struct BoardView: View {
         Text("Duo Sketch")
             .font(.system(.footnote, design: .rounded).weight(.semibold))
             .tracking(1.5)
-            .foregroundStyle(Theme.label.opacity(0.85))
+            .foregroundStyle(Theme.label) // 4.8:1 or better on the body gradient
             .accessibilityHidden(true)
     }
 
@@ -136,7 +153,8 @@ struct BoardView: View {
         ToolbarItem(placement: .topBarLeading) {
             ClearButton(model: model)
         }
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            SettingsMenu(model: model)
             ShareButton(model: model)
         }
     }
@@ -176,14 +194,45 @@ private struct ShareButton: View {
     let model: SketchViewModel
 
     var body: some View {
-        ShareLink(
-            item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize),
-            preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
-        ) {
+        Menu {
+            shareLink(framed: true, title: "Share with frame", systemImage: "photo.artframe")
+            shareLink(framed: false, title: "Share drawing only", systemImage: "scribble")
+        } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
         .disabled(model.sketch.isEmpty)
     }
+
+    /// Each option offers a PNG first and an SVG second.
+    private func shareLink(framed: Bool, title: String, systemImage: String) -> some View {
+        ShareLink(
+            item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize, framed: framed),
+            preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
+        ) {
+            Label(title, systemImage: systemImage)
+        }
+    }
+}
+
+/// In-app settings. Dial haptics also follow the system haptics setting.
+private struct SettingsMenu: View {
+    let model: SketchViewModel
+    @AppStorage(SettingsKeys.hapticsEnabled) private var hapticsEnabled = true
+
+    var body: some View {
+        Menu {
+            Toggle(isOn: $hapticsEnabled) {
+                Label("Dial haptics", systemImage: "hand.tap")
+            }
+        } label: {
+            Label("Settings", systemImage: "gearshape")
+        }
+        .task(id: hapticsEnabled) { model.hapticsEnabled = hapticsEnabled }
+    }
+}
+
+enum SettingsKeys {
+    static let hapticsEnabled = "hapticsEnabled"
 }
 
 #Preview("Portrait, no hinge") {

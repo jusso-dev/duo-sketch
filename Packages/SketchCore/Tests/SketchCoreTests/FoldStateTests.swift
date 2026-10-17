@@ -85,6 +85,25 @@ final class FoldStateTests: XCTestCase {
         XCTAssertEqual(seen, [.unavailable])
     }
 
+    func testStaticServiceKeepsItsPosture() async {
+        let service = StaticFoldStateService(.partiallyOpen(angleDegrees: 100))
+        XCTAssertTrue(service.isHingeAvailable)
+        var seen: [FoldPosture] = []
+        for await p in service.updates { seen.append(p) }
+        XCTAssertEqual(seen, [.partiallyOpen(angleDegrees: 100)])
+    }
+
+    func testSlowSubscriberKeepsOnlyTheNewestPostures() async {
+        let mock = MockFoldStateService(initial: .open)
+        let stream = mock.updates
+        for angle in 1...100 { mock.send(.partiallyOpen(angleDegrees: Double(angle))) }
+        mock.finish()
+        var seen: [FoldPosture] = []
+        for await p in stream { seen.append(p) }
+        XCTAssertEqual(seen.count, FoldBroadcaster.bufferSize)
+        XCTAssertEqual(seen.last, .partiallyOpen(angleDegrees: 100))
+    }
+
     func testOpeningScriptAndOpenFraction() {
         let mock = MockFoldStateService()
         XCTAssertEqual(mock.current, .closed)
