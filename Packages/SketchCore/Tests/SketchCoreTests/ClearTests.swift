@@ -177,3 +177,21 @@ final class FoldClearPolicyTests: XCTestCase {
         XCTAssertEqual(clears, 1)
     }
 }
+
+final class ShakeDebounceTests: XCTestCase {
+    func testDropsShakesWithinHalfASecond() {
+        var d = ShakeDebounce()
+        XCTAssertTrue(d.accept(at: 10))
+        XCTAssertFalse(d.accept(at: 10.1))
+        XCTAssertFalse(d.accept(at: 10.49))
+        XCTAssertTrue(d.accept(at: 10.5))
+        XCTAssertFalse(d.accept(at: 10.7), "measured from the last accepted shake")
+    }
+
+    func testClockGoingBackwardsDoesNotLockShakesOut() {
+        var d = ShakeDebounce()
+        XCTAssertTrue(d.accept(at: 100))
+        XCTAssertTrue(d.accept(at: 5))
+        XCTAssertFalse(d.accept(at: .nan))
+    }
+}
