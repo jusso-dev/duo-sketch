@@ -178,10 +178,10 @@ jobs:
             scripts/export_screenshots.sh App/build/TestResults.xcresult "Screenshots/${{ steps.sim.outputs.slug }}"
           fi
 
-      # App Store screenshots also need a 6.9 inch iPhone. Only on manual runs,
-      # to keep pull request runs short.
+      # App Store screenshots also need a 6.9 inch iPhone. Only on manual runs
+      # and on pull requests labelled "screenshots", to keep other runs short.
       - name: Screenshots on a 6.9 inch iPhone
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'screenshots')
         working-directory: App
         run: |
           set -o pipefail
@@ -220,12 +220,16 @@ jobs:
           path: App/build/TestResults.xcresult
           if-no-files-found: ignore
 
-  # Manual runs only: put the screenshots on the ci-screenshots branch, so
-  # they can be viewed or fetched without downloading the artifact.
+  # Manual runs and pull requests labelled "screenshots" (from this repo, not
+  # forks): put the screenshots on the ci-screenshots branch, so they can be
+  # viewed or fetched without downloading the artifact.
   publish-screenshots:
     name: Publish screenshots to the ci-screenshots branch
     needs: build-test
-    if: always() && github.event_name == 'workflow_dispatch'
+    if: >-
+      always() && (github.event_name == 'workflow_dispatch' ||
+      (contains(github.event.pull_request.labels.*.name, 'screenshots') &&
+      github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: xcode-27
     timeout-minutes: 10
     permissions:
