@@ -32,7 +32,11 @@ struct CanvasView: View {
         .accessibilityValue(sketch.isEmpty ? "Empty" : "\(sketch.pointCount) points")
     }
 
+    /// Maps a drawing point into the drawing's letterboxed frame, so the
+    /// drawing keeps its proportions when the canvas changes shape.
     private func point(_ p: Point, in size: CGSize) -> CGPoint {
-        CGPoint(x: p.x * size.width, y: p.y * size.height)
+        let frame = sketch.frame(in: CanvasSize(width: size.width, height: size.height))
+        let position = frame.position(of: p)
+        return CGPoint(x: position.x, y: position.y)
     }
 }

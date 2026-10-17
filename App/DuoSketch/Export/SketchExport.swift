@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 import SketchCore
 
 /// Shareable drawing. Offers a framed PNG first and an SVG second.
-/// Both keep the canvas's aspect ratio, with the longer side `longSide` pixels.
+/// Both keep the drawing's aspect ratio, with the longer side `longSide` pixels.
 struct SketchExport: Transferable {
     let sketch: Sketch
     /// The on-screen canvas the drawing was made on. Points are fractions of it.
@@ -29,13 +29,17 @@ struct SketchExport: Transferable {
         case renderFailed
     }
 
-    /// SVG document size: the canvas aspect ratio at `longSide`.
-    var svgSize: CanvasSize { canvasSize.scaled(toLongSide: longSide) }
+    /// The shape the drawing was made at. This stays the same when the canvas
+    /// changes shape later, so the export is never stretched.
+    var drawingShape: CanvasSize { sketch.frame(in: canvasSize).size }
+
+    /// SVG document size: the drawing's aspect ratio at `longSide`.
+    var svgSize: CanvasSize { drawingShape.scaled(toLongSide: longSide) }
 
     /// Size of the drawing inside the PNG card, in points. The card adds
     /// `cardPadding` on every side, so the whole card's long side is `longSide / scale`.
     var cardCanvasSize: CanvasSize {
-        canvasSize.scaled(toLongSide: longSide / SketchExport.scale - 2 * SketchExport.cardPadding)
+        drawingShape.scaled(toLongSide: longSide / SketchExport.scale - 2 * SketchExport.cardPadding)
     }
 
     func svgString() -> String {
