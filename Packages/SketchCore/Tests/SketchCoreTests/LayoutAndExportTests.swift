@@ -22,6 +22,25 @@ final class BoardLayoutTests: XCTestCase {
     }
 }
 
+final class EaselBandTests: XCTestCase {
+    func testHingeSettleAfterClosingKeepsTheOuterLayout() {
+        // A shut phone reporting 1 to 2 degrees must not flip into easel.
+        XCTAssertEqual(BoardLayout.choose(horizontal: .compact, vertical: .regular, fold: .partiallyOpen(angleDegrees: 1)), .portrait)
+        XCTAssertEqual(BoardLayout.choose(horizontal: .compact, vertical: .regular, fold: .partiallyOpen(angleDegrees: 19.9)), .portrait)
+    }
+
+    func testEaselOnlyInsideTheBand() {
+        XCTAssertEqual(BoardLayout.choose(horizontal: .compact, vertical: .regular, fold: .partiallyOpen(angleDegrees: 20)), .easel)
+        XCTAssertEqual(BoardLayout.choose(horizontal: .compact, vertical: .regular, fold: .partiallyOpen(angleDegrees: 160)), .easel)
+        XCTAssertEqual(BoardLayout.choose(horizontal: .regular, vertical: .regular, fold: .partiallyOpen(angleDegrees: 175)), .wide, "nearly flat")
+        XCTAssertNotEqual(BoardLayout.choose(horizontal: .compact, vertical: .regular, fold: .partiallyOpen(angleDegrees: .nan)), .easel)
+    }
+
+    func testLayoutAndClearPolicyShareTheThreshold() {
+        XCTAssertEqual(BoardLayout.easelAngles.lowerBound, FoldClearPolicy().reopenAngleDegrees)
+    }
+}
+
 final class HapticThrottleTests: XCTestCase {
     func testLimitsRate() {
         var t = HapticThrottle(maxPerSecond: 30)
