@@ -15,9 +15,15 @@ public enum BoardLayout: Sendable, Equatable {
     /// Canvas on the upper half, dials on the lower half. iPhone Duo half open.
     case easel
 
+    /// Partial hinge angles that use the easel layout. Below the lower bound the
+    /// phone is effectively shut (a hinge settling after closing reports a degree
+    /// or two), and above the upper bound it is effectively flat. The lower bound
+    /// is the same angle `FoldClearPolicy` treats as a reopen.
+    public static let easelAngles: ClosedRange<Double> = FoldPosture.reopenAngleDegrees...160
+
     /// Chooses a layout. Size classes drive layout; the hinge only adds easel mode.
     public static func choose(horizontal: SizeClass, vertical: SizeClass, fold: FoldPosture) -> BoardLayout {
-        if fold.isPartiallyOpen { return .easel }
+        if case .partiallyOpen(let angle) = fold, easelAngles.contains(angle) { return .easel }
         switch (horizontal, vertical) {
         case (.regular, .regular): return .wide
         case (_, .compact): return .landscape

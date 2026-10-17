@@ -49,6 +49,10 @@ public enum FoldPosture: Equatable, Hashable, Sendable, CustomStringConvertible 
         }
     }
 
+    /// Below this partial angle a phone that has just closed still counts as
+    /// closed. Shared by `FoldClearPolicy` and `BoardLayout`.
+    public static let reopenAngleDegrees = 20.0
+
     public var isClosed: Bool { self == .closed }
     public var isOpen: Bool { self == .open }
     public var isPartiallyOpen: Bool {

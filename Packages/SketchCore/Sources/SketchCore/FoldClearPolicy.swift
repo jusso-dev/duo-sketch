@@ -15,7 +15,7 @@ public struct FoldClearPolicy: Sendable, Equatable {
     private var closedAt: Double?
     private var isShut = false
 
-    public init(minimumClosedDuration: Double = 0.4, reopenAngleDegrees: Double = 20) {
+    public init(minimumClosedDuration: Double = 0.4, reopenAngleDegrees: Double = FoldPosture.reopenAngleDegrees) {
         self.minimumClosedDuration = minimumClosedDuration
         self.reopenAngleDegrees = reopenAngleDegrees
     }
