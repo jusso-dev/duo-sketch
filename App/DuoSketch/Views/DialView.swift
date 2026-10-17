@@ -30,13 +30,13 @@ struct DialView: View {
             ticks
                 .rotationEffect(.degrees(dial.capAngle))
             Capsule()
-                .fill(Theme.bodyShade)
+                .fill(Theme.dialMark)
                 .frame(width: 4, height: diameter * 0.22)
                 .offset(y: -diameter * 0.3)
                 .rotationEffect(.degrees(dial.capAngle))
             Image(systemName: axis == .horizontal ? "arrow.left.and.right" : "arrow.up.and.down")
                 .font(.system(size: diameter * 0.16, weight: .semibold))
-                .foregroundStyle(Theme.bodyShade) // 3.8:1 on brass
+                .foregroundStyle(Theme.dialMark)
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Circle())

@@ -156,9 +156,13 @@ public final class FoldBroadcaster: Sendable {
         state.withLock { $0.continuations.count }
     }
 
-    /// How many postures a subscriber that isn't reading keeps. Older ones are
-    /// dropped: only the latest posture matters. Matches the sibling apps.
-    public static let bufferSize = 16
+    /// How many postures a subscriber that isn't reading keeps before the
+    /// oldest are dropped. Bounded so a stalled subscriber can't grow without
+    /// limit, but large enough for a whole close and reopen: the hinge service
+    /// publishes at most one partial angle per 2 degrees, so a full fold is
+    /// about 90 updates on each side of `.closed`. Dropping `.closed` would
+    /// lose the clear.
+    public static let bufferSize = 256
 
     public func stream() -> AsyncStream<FoldPosture> {
         AsyncStream(bufferingPolicy: .bufferingNewest(FoldBroadcaster.bufferSize)) { continuation in

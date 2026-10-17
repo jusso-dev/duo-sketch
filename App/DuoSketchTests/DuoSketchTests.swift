@@ -177,7 +177,9 @@ final class DuoSketchTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(ratio(Theme.ink, Theme.surface), 4.5, "ink on sand, \(style)")
             XCTAssertGreaterThanOrEqual(ratio(Theme.label, Theme.body), 4.5, "wordmark on body, \(style)")
             XCTAssertGreaterThanOrEqual(ratio(Theme.label, Theme.bodyShade), 4.5, "wordmark on shade, \(style)")
-            XCTAssertGreaterThanOrEqual(ratio(Theme.bodyShade, Theme.brass), 3, "dial arrow, \(style)")
+            // The dial is a gradient from brass to dark brass; check the darkest end.
+            XCTAssertGreaterThanOrEqual(ratio(Theme.dialMark, Theme.brass), 3, "dial arrow on brass, \(style)")
+            XCTAssertGreaterThanOrEqual(ratio(Theme.dialMark, Theme.brassDark), 3, "dial arrow on dark brass, \(style)")
         }
     }
 

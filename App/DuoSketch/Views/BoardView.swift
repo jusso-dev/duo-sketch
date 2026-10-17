@@ -46,7 +46,7 @@ struct BoardView: View {
                     .shadow(color: .black.opacity(0.3), radius: 10, y: 6)
             )
             .keyframeAnimator(initialValue: 0.0, trigger: model.shakeTrigger) { content, offset in
-                content.offset(x: reduceMotion ? 0 : offset)
+                content.offset(x: reduceMotion ? 0 : shakeOffset(animated: offset))
             } keyframes: { _ in
                 KeyframeTrack {
                     CubicKeyframe(14, duration: 0.08)
@@ -57,6 +57,12 @@ struct BoardView: View {
                     CubicKeyframe(0, duration: 0.12)
                 }
             }
+    }
+
+    /// The animated offset, or a fixed one while a `-holdShake` launch holds
+    /// the shake for a screenshot.
+    private func shakeOffset(animated: Double) -> Double {
+        LaunchOptions.holdShake && model.clearController.isShaking ? LaunchOptions.heldShakeOffset : animated
     }
 
     @ViewBuilder
@@ -214,7 +220,8 @@ private struct ShareButton: View {
     }
 }
 
-/// In-app settings. Dial haptics also follow the system haptics setting.
+/// In-app settings. The Haptics toggle covers every haptic in the app (dial
+/// ticks, edge bumps and the clear pattern); they also follow the system setting.
 private struct SettingsMenu: View {
     let model: SketchViewModel
     @AppStorage(SettingsKeys.hapticsEnabled) private var hapticsEnabled = true
@@ -222,7 +229,7 @@ private struct SettingsMenu: View {
     var body: some View {
         Menu {
             Toggle(isOn: $hapticsEnabled) {
-                Label("Dial haptics", systemImage: "hand.tap")
+                Label("Haptics", systemImage: "hand.tap")
             }
         } label: {
             Label("Settings", systemImage: "gearshape")

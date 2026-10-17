@@ -34,9 +34,10 @@ public enum DemoDrawings {
         ]
         sketch.movePen(dx: 12, dy: 0, in: size)
         for (height, width) in buildings {
-            sketch.movePen(dx: 0, dy: -height, in: size)
-            sketch.movePen(dx: width, dy: 0, in: size)
+            // Positive dy moves the pen up.
             sketch.movePen(dx: 0, dy: height, in: size)
+            sketch.movePen(dx: width, dy: 0, in: size)
+            sketch.movePen(dx: 0, dy: -height, in: size)
             sketch.movePen(dx: 4, dy: 0, in: size)
         }
         return sketch

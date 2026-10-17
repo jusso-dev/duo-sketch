@@ -26,11 +26,15 @@ final class ScreenshotTests: XCTestCase {
     }
 
     func test4ShakeClear() {
-        let app = launch(drawing: "hills")
+        // -holdShake freezes the board mid swing with the drawing still on it,
+        // so the shot doesn't race the 0.6 s animation.
+        let app = launch(drawing: "hills", extra: ["-holdShake"])
         let clear = app.buttons["Clear"]
         XCTAssertTrue(clear.waitForExistence(timeout: 5))
         clear.tap()
-        // The shake lasts 0.6 s. Take the shot while it is still moving.
+        // While the shake is held the board is still drawn, so Clear stays put
+        // and Undo clear never appears.
+        XCTAssertFalse(app.buttons["Undo clear"].waitForExistence(timeout: 2))
         snap(app, "4-shake-clear")
     }
 
@@ -42,15 +46,16 @@ final class ScreenshotTests: XCTestCase {
         let framed = app.buttons["Share with frame"]
         XCTAssertTrue(framed.waitForExistence(timeout: 5))
         framed.tap()
-        // The share sheet renders the PNG preview before it settles.
-        _ = app.otherElements["ActivityListView"].waitForExistence(timeout: 10)
+        // Fail rather than save a picture of the board as the share sheet.
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 10), "share sheet did not appear")
+        // Let the PNG preview render before the shot.
         sleep(2)
         snap(app, "5-share-sheet")
     }
 
-    private func launch(drawing: String, posture: String = "open") -> XCUIApplication {
+    private func launch(drawing: String, posture: String = "open", extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-demoDrawing", drawing, "-foldPosture", posture]
+        app.launchArguments = ["-demoDrawing", drawing, "-foldPosture", posture] + extra
         app.launch()
         XCTAssertTrue(app.buttons["Share"].waitForExistence(timeout: 10))
         return app

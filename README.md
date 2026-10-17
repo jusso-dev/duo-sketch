@@ -42,7 +42,7 @@ Duo Sketch works on every iPhone that runs iOS 18 or later.
 ## Sharing and settings
 
 - Share offers the drawing with its eucalyptus frame or on its own. Both come as a PNG at 3x, with an SVG as the second format. Nothing leaves the phone unless you share it.
-- The gear menu turns dial haptics on or off. Haptics also follow the system setting.
+- The gear menu turns haptics on or off: dial ticks, edge bumps and the clear pattern. They also follow the system setting.
 - With Reduce Motion on, the board doesn't shake when it clears. The drawing fades out instead.
 
 ## Project layout

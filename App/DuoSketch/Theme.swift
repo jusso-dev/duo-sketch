@@ -14,6 +14,8 @@ enum Theme {
     static let ink = Color(red: 0.169, green: 0.169, blue: 0.169)         // #2B2B2B graphite
     static let brass = Color(red: 0.776, green: 0.580, blue: 0.278)       // #C69447
     static let brassDark = Color(red: 0.549, green: 0.416, blue: 0.184)   // #8C6A2F
+    /// Engraving on the dials. 3:1 or better across the whole brass gradient.
+    static let dialMark = Color(red: 0.078, green: 0.165, blue: 0.141)    // #142A24
     static let label = Color(red: 0.937, green: 0.890, blue: 0.784)
 
     static let inkHex = "#2B2B2B"

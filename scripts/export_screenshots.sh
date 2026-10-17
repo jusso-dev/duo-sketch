@@ -12,6 +12,8 @@ trap 'rm -rf "$tmp"' EXIT
 
 xcrun xcresulttool export attachments --path "$result" --output-path "$tmp" >/dev/null
 mkdir -p "$dest"
+# Drop the shots from an earlier export so a missing one can't pass as current.
+rm -f "$dest"/[0-9]-*.png
 python3 - "$tmp" "$dest" <<'PY'
 import json, os, re, shutil, sys
 src, dest = sys.argv[1], sys.argv[2]

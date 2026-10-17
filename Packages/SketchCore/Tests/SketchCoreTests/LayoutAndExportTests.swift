@@ -60,6 +60,10 @@ final class HapticThrottleTests: XCTestCase {
         var t = HapticThrottle()
         t.maxPerSecond = 0
         XCTAssertEqual(t.maxPerSecond, 1)
+        var fast = HapticThrottle(maxPerSecond: .infinity)
+        XCTAssertEqual(fast.maxPerSecond, HapticThrottle.ceiling)
+        XCTAssertTrue(fast.shouldFire(at: 0))
+        XCTAssertFalse(fast.shouldFire(at: 0.0001), "infinity no longer means no limit")
     }
 }
 
@@ -121,6 +125,11 @@ final class DemoDrawingsTests: XCTestCase {
         XCTAssertFalse(DemoDrawings.hills().isEmpty)
         XCTAssertEqual(DemoDrawings.skyline(), DemoDrawings.skyline())
         XCTAssertFalse(DemoDrawings.skyline().isEmpty)
+        // Buildings rise from the baseline and the pen ends back on it.
+        let skyline = DemoDrawings.skyline()
+        XCTAssertEqual(skyline.pen.y, 0.85, accuracy: 1e-9)
+        let top = skyline.strokes.flatMap(\.points).map(\.y).min() ?? 1
+        XCTAssertEqual(top, 0.85 - 200.0 / 360, accuracy: 1e-6)
     }
 }
 

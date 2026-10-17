@@ -13,8 +13,9 @@ Duo Sketch is an original design. This note records the choices so contributors 
 | Ink | Graphite | `#2B2B2B` |
 | Dials | Brass | `#C69447` |
 | Dial shade | Dark brass | `#8C6A2F` |
+| Dial engraving | Dark eucalyptus | `#142A24` |
 
-Graphite on sand has a contrast ratio of about 11:1, well above 4.5:1. The sand wordmark is 5.9:1 on the eucalyptus body and 8.2:1 on the deep shade. The deep eucalyptus arrows on the brass dials are 3.8:1, above the 3:1 needed for graphics.
+Graphite on sand has a contrast ratio of about 11:1, well above 4.5:1. The sand wordmark is 5.9:1 on the eucalyptus body and 8.2:1 on the deep shade. The dial pointer and arrow are a darker eucalyptus (`#142A24`): 5.6:1 on brass and 3.0:1 on dark brass, so they stay above the 3:1 needed for graphics across the whole dial gradient.
 
 The colours are fixed, so the board looks the same in light and dark appearance, the way a physical toy would. Because nothing changes, the ratios above hold in both. `testPaletteContrastInLightAndDark` in the app tests checks them in both appearances.
 

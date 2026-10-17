@@ -24,7 +24,8 @@ struct DuoSketchApp: App {
                     let model = SketchViewModel(
                         foldService: LaunchOptions.foldService ?? hinge,
                         sketch: demo ?? Sketch(),
-                        store: demo == nil ? FileSketchStore.applicationSupport() : nil
+                        store: demo == nil ? FileSketchStore.applicationSupport() : nil,
+                        sleep: LaunchOptions.holdShake ? { _ in await LaunchOptions.waitForever() } : nil
                     )
                     self.model = model
                     Task { await model.restore() }
@@ -42,7 +43,18 @@ struct DuoSketchApp: App {
 ///   read or write the saved drawing.
 /// - `-foldPosture easel`, `open` or `closed` fixes the fold posture instead of
 ///   reading the hinge, so easel mode can be shown on any simulator.
+/// - `-holdShake` freezes a shake clear mid swing and never finishes it, so a
+///   screenshot of the shake doesn't depend on timing.
 enum LaunchOptions {
+    static let holdShake = ProcessInfo.processInfo.arguments.contains("-holdShake")
+
+    /// Board offset shown while a held shake is on screen.
+    static let heldShakeOffset = 12.0
+
+    static func waitForever() async {
+        while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+    }
+
     static var demoSketch: Sketch? {
         switch value(after: "-demoDrawing") {
         case "spiral": return DemoDrawings.spiral()
