@@ -237,4 +237,73 @@ final class DuoSketchTests: XCTestCase {
         model.deviceShaken()
         XCTAssertEqual(spoken.count, 2, "nothing to announce on an empty board")
     }
+
+    // MARK: Undo clear (SK-11)
+
+    func testAccidentalCloseAndReopenCanBeUndone() async {
+        let original = DemoDrawings.spiral()
+        var now = 0.0
+        let model = SketchViewModel(
+            foldService: MockFoldStateService(initial: .open),
+            sketch: original,
+            clock: { now },
+            sleep: { seconds in if seconds == SketchViewModel.undoWindow { try? await Task.sleep(for: .seconds(3600)) } }
+        )
+        model.handle(.closed)
+        now = 0.5
+        model.handle(.open)
+        await model.shakeTask?.value
+        XCTAssertTrue(model.sketch.isEmpty)
+        XCTAssertTrue(model.canUndoClear)
+        model.undoClear()
+        XCTAssertEqual(model.sketch, original)
+        XCTAssertFalse(model.canUndoClear)
+    }
+
+    func testUndoExpires() async {
+        let gate = SleepGate()
+        let model = SketchViewModel(
+            foldService: UnavailableFoldStateService(),
+            sketch: DemoDrawings.spiral(),
+            clock: { 0 },
+            sleep: { seconds in if seconds == SketchViewModel.undoWindow { await gate.wait() } }
+        )
+        model.beginShakeClear()
+        await model.shakeTask?.value
+        XCTAssertTrue(model.canUndoClear)
+        while gate.count == 0 { await Task.yield() }
+        gate.openAll()
+        await model.undoExpiryTask?.value
+        XCTAssertFalse(model.canUndoClear)
+        model.undoClear()
+        XCTAssertTrue(model.sketch.isEmpty, "too late to undo")
+    }
+
+    func testDrawingAfterAClearDropsUndo() async {
+        let model = SketchViewModel(
+            foldService: UnavailableFoldStateService(),
+            sketch: DemoDrawings.spiral(),
+            clock: { 0 },
+            sleep: { seconds in if seconds == SketchViewModel.undoWindow { try? await Task.sleep(for: .seconds(3600)) } }
+        )
+        model.canvasSize = CanvasSize(width: 300, height: 300)
+        model.beginShakeClear()
+        await model.shakeTask?.value
+        model.turn(.horizontal, by: 90)
+        XCTAssertFalse(model.canUndoClear, "a new drawing is never replaced by an undo")
+    }
+}
+
+/// A sleep that only returns when the test lets it.
+final class SleepGate: @unchecked Sendable {
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private let lock = NSLock()
+    func wait() async {
+        await withCheckedContinuation { c in lock.withLock { waiters.append(c) } }
+    }
+    func openAll() {
+        let all = lock.withLock { defer { waiters = [] }; return waiters }
+        all.forEach { $0.resume() }
+    }
+    var count: Int { lock.withLock { waiters.count } }
 }

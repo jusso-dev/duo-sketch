@@ -155,12 +155,20 @@ private struct ClearButton: View {
     let model: SketchViewModel
 
     var body: some View {
-        Button {
-            model.beginShakeClear()
-        } label: {
-            Label("Clear", systemImage: "eraser")
+        if model.canUndoClear {
+            Button {
+                model.undoClear()
+            } label: {
+                Label("Undo clear", systemImage: "arrow.uturn.backward")
+            }
+        } else {
+            Button {
+                model.beginShakeClear()
+            } label: {
+                Label("Clear", systemImage: "eraser")
+            }
+            .disabled(model.sketch.isEmpty)
         }
-        .disabled(model.sketch.isEmpty)
     }
 }
 

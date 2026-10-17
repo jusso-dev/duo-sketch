@@ -123,6 +123,8 @@ final class SketchViewModel {
         let move = axis == .horizontal
             ? sketch.movePen(dx: step.distance, dy: 0, in: canvasSize)
             : sketch.movePen(dx: 0, dy: step.distance, in: canvasSize)
+        // Drawing something new ends the chance to undo the last clear.
+        if move.moved, canUndoClear { dropUndo() }
         if move.bumpedEdge {
             haptics.bump()
         } else if step.detentsCrossed > 0, throttle.shouldFire(at: now) {
@@ -141,10 +143,14 @@ final class SketchViewModel {
             await sleep(ClearController.shakeDuration)
             // Finish unconditionally. Re-checking the time here used to leave the
             // board stuck in `.shaking` whenever the clock lagged the sleep.
+            let before = sketch
             let cleared = withAnimation(.easeOut(duration: 0.25)) {
                 clearController.finishShakeClear(sketch: &sketch)
             }
-            if cleared { announce("Board cleared") }
+            if cleared {
+                announce("Board cleared")
+                offerUndo(of: before)
+            }
         }
     }
 
@@ -157,6 +163,45 @@ final class SketchViewModel {
         }
         if hadInk, !clearController.isShaking { announce(empty ? "Board cleared" : "Drawing faded") }
         haptics.bump()
+    }
+
+    // MARK: Undo clear
+
+    /// How long Undo stays available after a full clear, in seconds.
+    static let undoWindow = 6.0
+
+    /// True for a few seconds after a full clear (fold or Clear button), until
+    /// the pen draws again. Shutting the phone briefly to check something and
+    /// reopening it no longer loses the drawing for good.
+    private(set) var canUndoClear = false
+    @ObservationIgnored private var clearedSketch: Sketch?
+    @ObservationIgnored private(set) var undoExpiryTask: Task<Void, Never>?
+
+    private func offerUndo(of previous: Sketch) {
+        clearedSketch = previous
+        canUndoClear = true
+        undoExpiryTask?.cancel()
+        let sleep = self.sleep
+        undoExpiryTask = Task { @MainActor [weak self] in
+            await sleep(SketchViewModel.undoWindow)
+            guard !Task.isCancelled else { return }
+            self?.dropUndo()
+        }
+    }
+
+    private func dropUndo() {
+        undoExpiryTask?.cancel()
+        undoExpiryTask = nil
+        clearedSketch = nil
+        if canUndoClear { canUndoClear = false }
+    }
+
+    /// Puts back the drawing the last full clear removed.
+    func undoClear() {
+        guard canUndoClear, let previous = clearedSketch, !clearController.isShaking else { return }
+        withAnimation(.easeOut(duration: 0.25)) { sketch = previous }
+        dropUndo()
+        announce("Drawing restored")
     }
 
     // MARK: Accessibility
