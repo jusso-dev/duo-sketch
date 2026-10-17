@@ -26,7 +26,7 @@ This runs the screenshot tests on a 6.9 inch iPhone (`iPhone 17 Pro Max`) and on
 scripts/screenshots.sh "iPhone 18 Pro Max"
 ```
 
-CI also exports them. Every run uploads a `Screenshots` artifact from the simulator it tested on (an iPhone Duo when the runtime has one). A manual run (Actions, iOS, Run workflow) adds the newest Pro Max iPhone too.
+CI also exports them. Every run uploads a `Screenshots` artifact from the simulator it tested on (an iPhone Duo when the runtime has one). A manual run (Actions, iOS, Run workflow) adds the newest Pro Max iPhone too. A manual run also pushes every image to the `ci-screenshots` branch, so you can browse them on GitHub or `git fetch origin ci-screenshots`.
 
 ## iPhone Duo outer display
 
