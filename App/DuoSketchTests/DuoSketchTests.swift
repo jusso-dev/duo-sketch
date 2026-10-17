@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SwiftUI
 import SketchCore
 @testable import DuoSketch
 
