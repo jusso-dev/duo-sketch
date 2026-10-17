@@ -116,6 +116,50 @@ final class FoldClearPolicyTests: XCTestCase {
         XCTAssertFalse(p.handle(.open, at: 2))
     }
 
+    // MARK: Hinge bounce (issue #21, finding 2)
+
+    func testOneDegreeBounceAfterClosingDoesNotClear() {
+        var p = FoldClearPolicy()
+        _ = p.handle(.open, at: 0)
+        _ = p.handle(.closed, at: 1)
+        XCTAssertFalse(p.handle(.partiallyOpen(angleDegrees: 1), at: 2), "a 1 degree bounce is not a reopen")
+        XCTAssertFalse(p.handle(.closed, at: 2.1))
+        XCTAssertFalse(p.handle(.partiallyOpen(angleDegrees: 19.9), at: 3))
+    }
+
+    func testBounceThenRealOpenStillClearsOnce() {
+        var p = FoldClearPolicy()
+        _ = p.handle(.closed, at: 1)
+        _ = p.handle(.partiallyOpen(angleDegrees: 2), at: 1.1)
+        XCTAssertTrue(p.handle(.partiallyOpen(angleDegrees: 70), at: 2), "timer runs from the first close")
+        XCTAssertFalse(p.handle(.open, at: 2.5))
+    }
+
+    func testReopenThresholdIsInclusive() {
+        var p = FoldClearPolicy()
+        _ = p.handle(.closed, at: 0)
+        XCTAssertTrue(p.handle(.partiallyOpen(angleDegrees: 20), at: 1))
+    }
+
+    func testNaNAngleCountsAsClosed() {
+        var p = FoldClearPolicy()
+        _ = p.handle(.closed, at: 0)
+        XCTAssertFalse(p.handle(.partiallyOpen(angleDegrees: .nan), at: 1))
+        XCTAssertTrue(p.handle(.open, at: 2))
+    }
+
+    func testExactlyMinimumClosedDurationClears() {
+        var p = FoldClearPolicy(minimumClosedDuration: 0.4)
+        _ = p.handle(.closed, at: 1.0)
+        XCTAssertTrue(p.handle(.open, at: 1.4), "1.4 - 1.0 is 0.3999... in floating point")
+    }
+
+    func testJustUnderMinimumClosedDurationDoesNotClear() {
+        var p = FoldClearPolicy(minimumClosedDuration: 0.4)
+        _ = p.handle(.closed, at: 1.0)
+        XCTAssertFalse(p.handle(.open, at: 1.399))
+    }
+
     func testEndToEndWithMockService() async {
         let mock = MockFoldStateService(initial: .open)
         let stream = mock.updates
