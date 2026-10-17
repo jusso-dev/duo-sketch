@@ -14,14 +14,15 @@ concurrency:
 
 jobs:
   build-test:
-    name: SketchCore and app (macOS 15, hosted)
-    runs-on: macos-15
+    name: SketchCore and app (xcode-27 hosted runner)
+    runs-on: xcode-27
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
       - name: List Xcodes, SDKs and simulators
         run: |
+          sw_vers
           echo "== Xcode installs"
           ls /Applications | grep Xcode || true
           echo "== Default Xcode"
@@ -32,21 +33,33 @@ jobs:
           echo "== Simulators"
           xcrun simctl list devices available
 
-      - name: Select newest Xcode
+      - name: Select Xcode with iOS 27.1+ SDK
         run: |
-          XCODE=$(ls -d /Applications/Xcode*.app | grep -v -i beta | sort -V | tail -1)
-          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
-          echo "Selecting $XCODE"
-          sudo xcode-select -s "$XCODE/Contents/Developer"
-          xcodebuild -version
-          swift --version
-          IOS_SDK=$(xcodebuild -showsdks | sed -nE 's/.*-sdk iphoneos([0-9.]+).*/\1/p' | sort -V | tail -1)
-          echo "Newest iOS SDK: $IOS_SDK"
-          if printf '%s\n27.1\n' "$IOS_SDK" | sort -V | head -1 | grep -qx '27.1'; then
-            echo "iOS SDK $IOS_SDK includes the iPhone Duo hinge API (iOS 27.1+)."
-          else
-            echo "::warning::iOS SDK $IOS_SDK is older than 27.1, so the iPhone Duo hinge API (DeviceHinge, onHingeChange) is not available on this image."
+          has_duo_sdk() {
+            "$1/Contents/Developer/usr/bin/xcodebuild" -showsdks 2>/dev/null \
+              | sed -nE 's/.*-sdk iphoneos([0-9.]+).*/\1/p' \
+              | while read -r v; do
+                  if [ "$(printf '%s\n27.1\n' "$v" | sort -V | head -1)" = "27.1" ]; then echo "$v"; fi
+                done | sort -V | tail -1
+          }
+          PICK=""
+          for x in $(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V -r); do
+            v=$(has_duo_sdk "$x")
+            if [ -n "$v" ]; then PICK="$x"; echo "$x has iOS SDK $v"; break; fi
+            echo "$x: no iOS 27.1+ SDK"
+          done
+          if [ -z "$PICK" ]; then
+            PICK=$(ls -d /Applications/Xcode_27.0*.app 2>/dev/null | sort -V | tail -1)
+            echo "::warning::No Xcode with an iOS 27.1+ SDK found. Falling back to ${PICK:-the default Xcode}. DeviceHinge needs iOS 27.1."
           fi
+          [ -n "$PICK" ] && sudo xcode-select -s "$PICK/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i ios
+          swift --version
+          echo "== Device types"
+          xcrun simctl list devicetypes
+          echo "== Runtimes"
+          xcrun simctl list runtimes
 
       - name: SketchCore tests
         working-directory: Packages/SketchCore
@@ -59,26 +72,29 @@ jobs:
         working-directory: App
         run: xcodegen generate
 
-      - name: Pick a simulator
+      - name: Create a simulator
         id: sim
         run: |
-          SIM=$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          data = json.load(sys.stdin)["devices"]
-          ios = sorted((k for k in data if "SimRuntime.iOS" in k),
-                       key=lambda k: [int(x) for x in k.rsplit("iOS-", 1)[1].split("-")])
-          picked = None
-          for runtime in reversed(ios):
-              phones = [d for d in data[runtime] if d["name"].startswith("iPhone")]
-              duo = [d for d in phones if "Duo" in d["name"]]
-              if duo or phones:
-                  picked = (duo or phones)[-1]
-                  print(picked["udid"], runtime, picked["name"], file=sys.stderr)
-                  break
-          print(picked["udid"] if picked else "")
-          ')
-          [ -n "$SIM" ] || { echo "No iPhone simulator available"; exit 1; }
-          echo "udid=$SIM" >> "$GITHUB_OUTPUT"
+          read -r RUNTIME DEVTYPE DEVNAME < <(python3 - <<'PY'
+          import json, subprocess
+          def j(*a):
+              return json.loads(subprocess.check_output(["xcrun", "simctl", "list", "-j", *a]))
+          rts = [r for r in j("runtimes")["runtimes"]
+                 if r.get("isAvailable") and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-27")]
+          rts.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
+          rt = rts[-1]
+          supported = rt.get("supportedDeviceTypes") or j("devicetypes")["devicetypes"]
+          phones = [d for d in supported if d["name"].startswith("iPhone")]
+          duo = [d for d in phones if "Duo" in d["name"]]
+          dt = (duo or phones)[-1]
+          print(rt["identifier"], dt["identifier"], dt["name"].replace(" ", "_"))
+          PY
+          )
+          echo "Runtime: $RUNTIME"
+          echo "Device type: $DEVTYPE ($DEVNAME)"
+          UDID=$(xcrun simctl create "DuoSketch-CI" "$DEVTYPE" "$RUNTIME")
+          echo "Created simulator $UDID"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
 
       - name: Build and test app
         working-directory: App
