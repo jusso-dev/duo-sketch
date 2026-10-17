@@ -140,7 +140,7 @@ struct BoardView: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             ShareLink(
-                item: SketchExport(sketch: model.sketch),
+                item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize),
                 preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
             ) {
                 Label("Share", systemImage: "square.and.arrow.up")

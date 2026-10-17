@@ -70,3 +70,25 @@ final class DemoDrawingsTests: XCTestCase {
         XCTAssertFalse(DemoDrawings.hills().isEmpty)
     }
 }
+
+final class ExportSizeTests: XCTestCase {
+    func testKeepsAspectRatioWithLongSide() {
+        XCTAssertEqual(CanvasSize(width: 300, height: 450).scaled(toLongSide: 1080), CanvasSize(width: 720, height: 1080))
+        XCTAssertEqual(CanvasSize(width: 640, height: 360).scaled(toLongSide: 1080), CanvasSize(width: 1080, height: 608))
+        XCTAssertEqual(CanvasSize(width: 320, height: 320).scaled(toLongSide: 1080), CanvasSize(width: 1080, height: 1080))
+    }
+
+    func testSvgOfAScaledSizeIsNotSquare() {
+        var sketch = Sketch()
+        sketch.movePen(dx: 10, dy: 10, in: CanvasSize(width: 300, height: 450))
+        let size = CanvasSize(width: 300, height: 450).scaled(toLongSide: 1080)
+        let svg = SVGExporter.svg(sketch, width: size.width, height: size.height)
+        XCTAssertTrue(svg.contains("width=\"720\" height=\"1080\" viewBox=\"0 0 720 1080\""))
+    }
+
+    func testExtremeAspectStaysAtLeastOnePoint() {
+        let s = CanvasSize(width: 100_000, height: 1).scaled(toLongSide: 1080)
+        XCTAssertEqual(s.width, 1080)
+        XCTAssertEqual(s.height, 1)
+    }
+}

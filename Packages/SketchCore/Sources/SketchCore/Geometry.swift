@@ -23,3 +23,14 @@ public struct CanvasSize: Sendable, Hashable, Codable {
         self.height = max(height, 1)
     }
 }
+
+extension CanvasSize {
+    /// The same aspect ratio, scaled so the longer side is `longSide`.
+    /// Used for exports, so a drawing made on a tall or wide canvas isn't stretched.
+    public func scaled(toLongSide longSide: Double) -> CanvasSize {
+        let scale = longSide / max(width, height)
+        return CanvasSize(width: (width * scale).rounded(), height: (height * scale).rounded())
+    }
+
+    public var aspectRatio: Double { width / height }
+}

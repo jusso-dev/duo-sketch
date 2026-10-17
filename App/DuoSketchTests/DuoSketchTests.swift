@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 import SketchCore
 @testable import DuoSketch
 
@@ -75,5 +76,23 @@ final class DuoSketchTests: XCTestCase {
         model.endTurn(.horizontal)
         XCTAssertTrue(model.sketch.isEmpty)
         XCTAssertEqual(model.sketch.pen, .centre)
+    }
+
+    /// Exports keep the canvas's aspect ratio. They used to be squashed into a
+    /// 1080 square, so circles drawn on a tall canvas came out as ovals.
+    func testExportsKeepCanvasAspectRatio() throws {
+        let export = SketchExport(sketch: DemoDrawings.spiral(), canvasSize: CanvasSize(width: 300, height: 450))
+
+        let svg = export.svgString()
+        XCTAssertTrue(svg.contains("width=\"720\" height=\"1080\""), "SVG header: \(svg.prefix(120))")
+
+        let png = try export.pngData()
+        let image = try XCTUnwrap(UIImage(data: png))
+        let pixelWidth = image.size.width * image.scale
+        let pixelHeight = image.size.height * image.scale
+        XCTAssertEqual(pixelHeight, 1080, accuracy: 1)
+        XCTAssertLessThan(pixelWidth, pixelHeight, "PNG is no longer square")
+        // Card = canvas (216 x 324 pt) + 18 pt padding each side, at 3x.
+        XCTAssertEqual(pixelWidth, (216 + 36) * 3, accuracy: 1)
     }
 }
