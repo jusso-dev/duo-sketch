@@ -28,14 +28,37 @@ final class SketchViewModel {
     @ObservationIgnored private let haptics = Haptics()
     @ObservationIgnored private var throttle = HapticThrottle()
     @ObservationIgnored private var foldPolicy = FoldClearPolicy()
+    /// Seconds on one monotonic clock, used for fold timing and haptic throttling.
+    @ObservationIgnored private let clock: @MainActor () -> Double
+    /// Waits out the shake animation. Injected so tests don't sleep for real.
+    @ObservationIgnored private let sleep: @Sendable (Double) async -> Void
+    /// The task that finishes the current shake clear. Tests await it.
+    @ObservationIgnored private(set) var shakeTask: Task<Void, Never>?
 
-    init(foldService: any FoldStateService, sketch: Sketch = Sketch()) {
+    init(
+        foldService: any FoldStateService,
+        sketch: Sketch = Sketch(),
+        clock: (@MainActor () -> Double)? = nil,
+        sleep: (@Sendable (Double) async -> Void)? = nil
+    ) {
         self.foldService = foldService
         self.sketch = sketch
         self.posture = foldService.current
+        self.clock = clock ?? SketchViewModel.continuousSeconds()
+        self.sleep = sleep ?? { seconds in _ = try? await Task.sleep(for: .seconds(seconds)) }
     }
 
-    private var now: Double { ProcessInfo.processInfo.systemUptime }
+    private var now: Double { clock() }
+
+    /// Seconds since this model was made, on `ContinuousClock`: the same clock
+    /// `Task.sleep` uses, so the shake timer and the fold timer agree.
+    private static func continuousSeconds() -> @MainActor () -> Double {
+        let origin = ContinuousClock.now
+        return {
+            let c = (ContinuousClock.now - origin).components
+            return Double(c.seconds) + Double(c.attoseconds) * 1e-18
+        }
+    }
 
     // MARK: Fold
 
@@ -111,10 +134,13 @@ final class SketchViewModel {
         guard !sketch.isEmpty, clearController.beginShakeClear(at: now) else { return }
         shakeTrigger += 1
         haptics.shake()
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(ClearController.shakeDuration))
+        let sleep = self.sleep
+        shakeTask = Task { @MainActor in
+            await sleep(ClearController.shakeDuration)
+            // Finish unconditionally. Re-checking the time here used to leave the
+            // board stuck in `.shaking` whenever the clock lagged the sleep.
             withAnimation(.easeOut(duration: 0.25)) {
-                _ = clearController.tick(at: now, sketch: &sketch)
+                _ = clearController.finishShakeClear(sketch: &sketch)
             }
         }
     }

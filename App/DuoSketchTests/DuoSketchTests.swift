@@ -41,4 +41,25 @@ final class DuoSketchTests: XCTestCase {
         XCTAssertNotNil(text, "NSPhotoLibraryAddUsageDescription is missing from the app's Info.plist")
         XCTAssertFalse(text?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
     }
+
+    /// A shake clear must always finish, even when the model's clock has not
+    /// moved on by the shake duration (for example it paused while the phone
+    /// slept). Before the fix the board stayed in `.shaking` and ignored the dials.
+    func testShakeClearFinishesWhenClockLags() async {
+        let model = SketchViewModel(
+            foldService: UnavailableFoldStateService(),
+            sketch: DemoDrawings.spiral(),
+            clock: { 100 },          // frozen clock
+            sleep: { _ in }          // no real wait
+        )
+        model.beginShakeClear()
+        XCTAssertTrue(model.clearController.isShaking)
+        await model.shakeTask?.value
+        XCTAssertFalse(model.clearController.isShaking, "board is stuck shaking")
+        XCTAssertTrue(model.sketch.isEmpty)
+
+        model.canvasSize = CanvasSize(width: 240, height: 240)
+        model.turn(.horizontal, by: 90)
+        XCTAssertFalse(model.sketch.isEmpty, "dials work again after the clear")
+    }
 }

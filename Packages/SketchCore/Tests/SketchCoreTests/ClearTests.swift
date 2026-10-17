@@ -22,6 +22,25 @@ final class ClearControllerTests: XCTestCase {
         XCTAssertNil(c.progress(at: 11))
     }
 
+    func testFinishShakeClearIgnoresALaggingClock() {
+        var c = ClearController()
+        var s = drawn()
+        XCTAssertTrue(c.beginShakeClear(at: 10))
+        // The clock used for `tick` paused (device asleep), so the shake looks unfinished.
+        XCTAssertFalse(c.tick(at: 10.2, sketch: &s))
+        XCTAssertTrue(c.finishShakeClear(sketch: &s))
+        XCTAssertTrue(s.isEmpty)
+        XCTAssertEqual(c.phase, .idle)
+        XCTAssertTrue(c.beginShakeClear(at: 10.3), "a new clear can start straight away")
+    }
+
+    func testFinishShakeClearWhenIdleDoesNothing() {
+        var c = ClearController()
+        var s = drawn()
+        XCTAssertFalse(c.finishShakeClear(sketch: &s))
+        XCTAssertFalse(s.isEmpty)
+    }
+
     func testShakeOffsetDecaysToZero() {
         var c = ClearController()
         XCTAssertEqual(c.shakeOffset(at: 0), 0)

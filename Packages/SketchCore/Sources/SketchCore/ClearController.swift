@@ -51,6 +51,19 @@ public struct ClearController: Sendable, Equatable {
         return true
     }
 
+    /// Ends a full clear shake now, whatever the clock says: clears the sketch
+    /// and returns to idle. Use this when the shake animation has finished, so a
+    /// clock that lags behind the animation (for example one that pauses while
+    /// the device sleeps) can never leave the board stuck in `.shaking`.
+    /// Returns false when no shake was playing.
+    @discardableResult
+    public mutating func finishShakeClear(sketch: inout Sketch) -> Bool {
+        guard isShaking else { return false }
+        sketch.clear()
+        phase = .idle
+        return true
+    }
+
     /// A device shake: fades the ink. Ignored while a full clear is playing.
     /// Returns true when the sketch is now empty.
     @discardableResult
