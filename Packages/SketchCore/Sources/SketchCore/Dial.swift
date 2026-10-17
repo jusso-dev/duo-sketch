@@ -48,13 +48,15 @@ public struct Dial: Sendable, Equatable {
         return a < 0 ? a + 360 : a
     }
 
-    public mutating func begin(at angleDegrees: Double) {
+    /// Sets the starting angle for `drag(to:)`. Internal: the app starts turns
+    /// with `drag(touchX:y:radius:)`, which handles the dead zone.
+    mutating func begin(at angleDegrees: Double) {
         lastAngle = angleDegrees
     }
 
     /// Absolute finger angle in degrees (screen convention, clockwise positive).
     /// Handles the jump across 0/360 by taking the shortest path.
-    public mutating func drag(to angleDegrees: Double) -> DialStep {
+    mutating func drag(to angleDegrees: Double) -> DialStep {
         guard let last = lastAngle else {
             lastAngle = angleDegrees
             return .none

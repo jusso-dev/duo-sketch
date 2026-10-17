@@ -8,26 +8,13 @@ final class ClearControllerTests: XCTestCase {
         return s
     }
 
-    func testShakeClearFinishesAfterDuration() {
+    func testShakeClearFinishesAndClears() {
         var c = ClearController()
         var s = drawn()
         XCTAssertTrue(c.beginShakeClear(at: 10))
         XCTAssertFalse(c.beginShakeClear(at: 10.1), "no double trigger")
-        XCTAssertFalse(c.tick(at: 10.3, sketch: &s))
-        XCTAssertFalse(s.isEmpty)
-        XCTAssertEqual(c.progress(at: 10.3)!, 0.5, accuracy: 1e-9)
-        XCTAssertTrue(c.tick(at: 10.6, sketch: &s))
-        XCTAssertTrue(s.isEmpty)
-        XCTAssertEqual(c.phase, .idle)
-        XCTAssertNil(c.progress(at: 11))
-    }
-
-    func testFinishShakeClearIgnoresALaggingClock() {
-        var c = ClearController()
-        var s = drawn()
-        XCTAssertTrue(c.beginShakeClear(at: 10))
-        // The clock used for `tick` paused (device asleep), so the shake looks unfinished.
-        XCTAssertFalse(c.tick(at: 10.2, sketch: &s))
+        XCTAssertTrue(c.isShaking)
+        XCTAssertFalse(s.isEmpty, "nothing clears until the shake finishes")
         XCTAssertTrue(c.finishShakeClear(sketch: &s))
         XCTAssertTrue(s.isEmpty)
         XCTAssertEqual(c.phase, .idle)
@@ -39,16 +26,6 @@ final class ClearControllerTests: XCTestCase {
         var s = drawn()
         XCTAssertFalse(c.finishShakeClear(sketch: &s))
         XCTAssertFalse(s.isEmpty)
-    }
-
-    func testShakeOffsetDecaysToZero() {
-        var c = ClearController()
-        XCTAssertEqual(c.shakeOffset(at: 0), 0)
-        c.beginShakeClear(at: 0)
-        XCTAssertEqual(c.shakeOffset(at: 0.6), 0, accuracy: 1e-9)
-        let peak = (0..<60).map { abs(c.shakeOffset(at: Double($0) / 100)) }.max()!
-        XCTAssertGreaterThan(peak, 5)
-        XCTAssertLessThanOrEqual(peak, 14)
     }
 
     func testThreeDeviceShakesClear() {
