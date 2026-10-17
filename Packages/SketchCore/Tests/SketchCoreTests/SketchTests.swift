@@ -139,4 +139,69 @@ final class SketchTests: XCTestCase {
         let two = [Point(x: 0, y: 0), Point(x: 0.0001, y: 0)]
         XCTAssertEqual(Sketch.thinned(two, minimumDistance: 0.5), two)
     }
+
+    // MARK: Canvas shape changes (SK-3)
+
+    /// Width and height on screen, in canvas points, of everything drawn.
+    func drawnExtent(_ s: Sketch, on canvas: CanvasSize) -> (Double, Double) {
+        let f = s.frame(in: canvas)
+        let pts = s.strokes.flatMap(\.points).map { f.position(of: $0) }
+        let xs = pts.map(\.x), ys = pts.map(\.y)
+        return (xs.max()! - xs.min()!, ys.max()! - ys.min()!)
+    }
+
+    func testSquareStaysSquareWhenTheCanvasChangesShape() {
+        var s = Sketch()
+        let wide = CanvasSize(width: 800, height: 400)
+        s.movePen(dx: 100, dy: 0, in: wide)
+        s.movePen(dx: 0, dy: 100, in: wide)
+        s.movePen(dx: -100, dy: 0, in: wide)
+        s.movePen(dx: 0, dy: -100, in: wide)
+        let (w0, h0) = drawnExtent(s, on: wide)
+        XCTAssertEqual(w0, 100, accuracy: 1e-6)
+        XCTAssertEqual(h0, 100, accuracy: 1e-6)
+        // Shown on a tall canvas it used to come out 45 x 125 pt.
+        let (w, h) = drawnExtent(s, on: CanvasSize(width: 360, height: 500))
+        XCTAssertEqual(w, 45, accuracy: 1e-6)
+        XCTAssertEqual(h, 45, accuracy: 1e-6)
+    }
+
+    func testFrameIsLetterboxedAndCentred() {
+        var s = Sketch()
+        s.movePen(dx: 10, dy: 0, in: CanvasSize(width: 800, height: 400))
+        let f = s.frame(in: CanvasSize(width: 360, height: 500))
+        XCTAssertEqual(f, DrawingFrame(x: 0, y: 160, width: 360, height: 180))
+    }
+
+    func testPenSpeedFollowsTheFrameAfterAShapeChange() {
+        var s = Sketch()
+        s.movePen(dx: 10, dy: 0, in: CanvasSize(width: 800, height: 400))
+        let x = s.pen.x
+        // 36 pt on a frame 360 pt wide is a tenth of the width.
+        s.movePen(dx: 36, dy: 0, in: CanvasSize(width: 360, height: 500))
+        XCTAssertEqual(s.pen.x - x, 0.1, accuracy: 1e-9)
+    }
+
+    func testClearingForgetsTheShape() {
+        var s = Sketch()
+        s.movePen(dx: 10, dy: 0, in: CanvasSize(width: 800, height: 400))
+        XCTAssertEqual(s.aspectRatio, 2)
+        s.clear()
+        XCTAssertNil(s.aspectRatio)
+        s.movePen(dx: 10, dy: 0, in: CanvasSize(width: 300, height: 600))
+        XCTAssertEqual(s.aspectRatio, 0.5)
+    }
+
+    func testFadingToEmptyForgetsTheShape() {
+        var s = Sketch()
+        s.movePen(dx: 10, dy: 0, in: CanvasSize(width: 800, height: 400))
+        XCTAssertTrue(s.fade(by: 1))
+        XCTAssertNil(s.aspectRatio)
+    }
+
+    func testOldSketchJSONWithoutAspectStillDecodes() throws {
+        let json = #"{"pen":{"x":0.5,"y":0.5},"strokes":[],"touchingEdge":false}"#
+        let s = try JSONDecoder().decode(Sketch.self, from: Data(json.utf8))
+        XCTAssertNil(s.aspectRatio)
+    }
 }

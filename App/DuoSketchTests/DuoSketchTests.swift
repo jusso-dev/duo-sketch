@@ -81,7 +81,8 @@ final class DuoSketchTests: XCTestCase {
     /// Exports keep the canvas's aspect ratio. They used to be squashed into a
     /// 1080 square, so circles drawn on a tall canvas came out as ovals.
     func testExportsKeepCanvasAspectRatio() throws {
-        let export = SketchExport(sketch: DemoDrawings.spiral(), canvasSize: CanvasSize(width: 300, height: 450))
+        let tall = CanvasSize(width: 300, height: 450)
+        let export = SketchExport(sketch: DemoDrawings.spiral(size: tall), canvasSize: tall)
 
         let svg = export.svgString()
         XCTAssertTrue(svg.contains("width=\"720\" height=\"1080\""), "SVG header: \(svg.prefix(120))")
@@ -94,5 +95,13 @@ final class DuoSketchTests: XCTestCase {
         XCTAssertLessThan(pixelWidth, pixelHeight, "PNG is no longer square")
         // Card = canvas (216 x 324 pt) + 18 pt padding each side, at 3x.
         XCTAssertEqual(pixelWidth, (216 + 36) * 3, accuracy: 1)
+    }
+
+    /// A drawing made on one canvas shape exports at that shape, even after the
+    /// canvas changes (rotation, easel to open, inner to outer display).
+    func testExportKeepsTheDrawingShapeAfterTheCanvasChanges() {
+        let wide = CanvasSize(width: 800, height: 400)
+        let export = SketchExport(sketch: DemoDrawings.spiral(size: wide), canvasSize: CanvasSize(width: 360, height: 500))
+        XCTAssertEqual(export.svgSize, CanvasSize(width: 1080, height: 540))
     }
 }

@@ -34,3 +34,25 @@ extension CanvasSize {
 
     public var aspectRatio: Double { width / height }
 }
+
+/// A rectangle in canvas points: where a drawing sits on the canvas.
+public struct DrawingFrame: Sendable, Hashable {
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+
+    public init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+
+    public var size: CanvasSize { CanvasSize(width: width, height: height) }
+
+    /// Canvas position of a normalised drawing point.
+    public func position(of p: Point) -> (x: Double, y: Double) {
+        (x + p.x * width, y + p.y * height)
+    }
+}
