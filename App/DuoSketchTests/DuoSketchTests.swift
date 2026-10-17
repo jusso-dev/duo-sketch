@@ -176,6 +176,13 @@ final class DuoSketchTests: XCTestCase {
 
     /// Shakes are caught by a first-responder view controller, debounced to
     /// one per 0.5 s.
+    func testAppHasAnIcon() throws {
+        let icons = try XCTUnwrap(Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+                                  "No CFBundleIcons, so the asset catalogue produced no app icon")
+        let primary = try XCTUnwrap(icons["CFBundlePrimaryIcon"] as? [String: Any])
+        XCTAssertEqual(primary["CFBundleIconName"] as? String, "AppIcon")
+    }
+
     func testShakeResponderDebouncesShakes() {
         var now = 0.0
         var shakes = 0
