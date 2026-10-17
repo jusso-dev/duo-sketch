@@ -53,7 +53,7 @@ ci/workflows/             CI workflow, waiting to be moved to .github/workflows
 
 ### Core package (Linux or macOS)
 
-Needs Swift 6.0 or later.
+Needs Swift 6.2 or later.
 
 ```sh
 cd Packages/SketchCore
