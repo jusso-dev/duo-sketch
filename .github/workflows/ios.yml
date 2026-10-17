@@ -196,6 +196,11 @@ jobs:
           print(p["identifier"], p["name"].replace(" ", "_"))' "$RUNTIME")
           UDID=$(xcrun simctl create "DuoSketch-69" "$DEVTYPE" "$RUNTIME")
           echo "::notice::6.9 inch screenshots on $DEVNAME"
+          # A cold simulator created next to a running one can miss the app
+          # launch timeout. Free the first one and wait for this one to boot.
+          xcrun simctl shutdown all || true
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
           xcodebuild -project DuoSketch.xcodeproj -scheme DuoSketch \
             -destination "id=$UDID" \
             -only-testing:DuoSketchUITests/ScreenshotTests \

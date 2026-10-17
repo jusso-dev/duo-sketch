@@ -297,7 +297,7 @@ private struct ShareButton: View {
             shareLink(framed: false, title: "Share drawing only", systemImage: "scribble")
             ShareLink(
                 item: ReplayMovie(sketch: model.sketch, canvasSize: model.canvasSize, theme: theme),
-                preview: SharePreview("Duo Sketch replay", image: Image(systemName: "play.rectangle"))
+                preview: SharePreview("Duo Sketch replay", image: thumbnail)
             ) {
                 Label("Share replay video", systemImage: "play.rectangle")
             }
@@ -307,11 +307,18 @@ private struct ShareButton: View {
         .disabled(model.sketch.isEmpty)
     }
 
+    /// The share sheet's thumbnail: the framed drawing itself, rendered only
+    /// when the sheet asks for it.
+    private var thumbnail: SketchExport {
+        SketchExport(sketch: model.sketch, canvasSize: model.canvasSize, longSide: 360, theme: theme)
+    }
+
     /// Each option offers a PNG first and an SVG second.
     private func shareLink(framed: Bool, title: String, systemImage: String) -> some View {
-        ShareLink(
-            item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize, framed: framed, theme: theme),
-            preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
+        let item = SketchExport(sketch: model.sketch, canvasSize: model.canvasSize, framed: framed, theme: theme)
+        return ShareLink(
+            item: item,
+            preview: SharePreview("Duo Sketch drawing", image: item)
         ) {
             Label(title, systemImage: systemImage)
         }
