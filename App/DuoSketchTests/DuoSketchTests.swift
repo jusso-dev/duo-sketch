@@ -299,6 +299,89 @@ final class DuoSketchTests: XCTestCase {
         model.turn(.horizontal, by: 90)
         XCTAssertFalse(model.canUndoClear, "a new drawing is never replaced by an undo")
     }
+
+    // MARK: Saving when the scene leaves the foreground
+
+    func testLeavingTheForegroundSavesTheDrawing() async {
+        let store = MemorySketchStore()
+        let model = SketchViewModel(foldService: UnavailableFoldStateService(), store: store, clock: { 0 }, sleep: { _ in })
+        model.canvasSize = CanvasSize(width: 300, height: 300)
+        model.turn(.horizontal, by: 180)
+        model.scenePhaseChanged(to: .active)
+        XCTAssertNil(model.saveTask, "nothing is saved while the app is in use")
+        model.scenePhaseChanged(to: .inactive)
+        await model.saveTask?.value
+        XCTAssertEqual(store.saves.map(\.sketch), [model.sketch])
+        model.scenePhaseChanged(to: .background)
+        await model.saveTask?.value
+        XCTAssertEqual(store.saves.count, 1, "an unchanged drawing isn't written twice")
+        model.turn(.vertical, by: 90)
+        model.scenePhaseChanged(to: .background)
+        await model.saveTask?.value
+        XCTAssertEqual(store.saves.last?.sketch, model.sketch)
+    }
+
+    func testAClearWithUndoOnOfferIsSavedWithTheDrawingItRemoved() async {
+        let original = DemoDrawings.spiral()
+        let store = MemorySketchStore()
+        let model = SketchViewModel(foldService: UnavailableFoldStateService(), sketch: original, store: store, clock: { 0 }, sleep: waitForever)
+        model.beginShakeClear()
+        await model.shakeTask?.value
+        model.scenePhaseChanged(to: .background)
+        await model.saveTask?.value
+        XCTAssertEqual(store.saves.last?.sketch.isEmpty, true)
+        XCTAssertEqual(store.saves.last?.undoSketch, original)
+    }
+
+    func testTheDrawingComesBackOnTheNextLaunch() async {
+        let store = MemorySketchStore()
+        let first = SketchViewModel(foldService: UnavailableFoldStateService(), sketch: DemoDrawings.hills(), store: store, clock: { 0 }, sleep: { _ in })
+        first.scenePhaseChanged(to: .background)
+        await first.saveTask?.value
+
+        let next = SketchViewModel(foldService: UnavailableFoldStateService(), store: store, clock: { 0 }, sleep: { _ in })
+        await next.restore()
+        XCTAssertEqual(next.sketch, DemoDrawings.hills())
+        XCTAssertFalse(next.canUndoClear)
+    }
+
+    func testUndoIsOfferedAgainAfterRelaunch() async {
+        let original = DemoDrawings.spiral()
+        var cleared = original
+        cleared.clear()
+        let store = MemorySketchStore(initial: SketchArchive(sketch: cleared, undoSketch: original))
+        let model = SketchViewModel(foldService: UnavailableFoldStateService(), store: store, clock: { 0 }, sleep: waitForever)
+        await model.restore()
+        XCTAssertTrue(model.canUndoClear)
+        model.undoClear()
+        XCTAssertEqual(model.sketch, original)
+    }
+
+    func testRestoreDoesNotReplaceANewDrawing() async {
+        let store = MemorySketchStore(initial: SketchArchive(sketch: DemoDrawings.spiral()))
+        let model = SketchViewModel(foldService: UnavailableFoldStateService(), store: store, clock: { 0 }, sleep: { _ in })
+        model.canvasSize = CanvasSize(width: 300, height: 300)
+        model.turn(.horizontal, by: 180)
+        let drawn = model.sketch
+        await model.restore()
+        XCTAssertEqual(model.sketch, drawn)
+    }
+}
+
+/// A sleep that never ends for the Undo window, so Undo stays on offer.
+let waitForever: @Sendable (Double) async -> Void = { seconds in
+    if seconds == SketchViewModel.undoWindow { try? await Task.sleep(for: .seconds(3600)) }
+}
+
+/// Keeps archives in memory, in the order they were saved.
+final class MemorySketchStore: SketchStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private var saved: [SketchArchive] = []
+    private let initial: SketchArchive?
+    init(initial: SketchArchive? = nil) { self.initial = initial }
+    func save(_ archive: SketchArchive) throws { lock.withLock { saved.append(archive) } }
+    func load() -> SketchArchive? { lock.withLock { saved.last ?? initial } }
+    var saves: [SketchArchive] { lock.withLock { saved } }
 }
 
 /// A sleep that only returns when the test lets it.

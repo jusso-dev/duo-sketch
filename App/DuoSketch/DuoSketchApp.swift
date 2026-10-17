@@ -5,6 +5,7 @@ import SketchCore
 struct DuoSketchApp: App {
     @State private var hinge = HingeFoldStateService()
     @State private var model: SketchViewModel?
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -18,8 +19,19 @@ struct DuoSketchApp: App {
             .feedingHinge(into: hinge)
             .onAppear {
                 if model == nil {
-                    model = SketchViewModel(foldService: hinge, sketch: LaunchOptions.demoSketch ?? Sketch())
+                    let demo = LaunchOptions.demoSketch
+                    // Demo launches don't touch the saved drawing.
+                    let model = SketchViewModel(
+                        foldService: hinge,
+                        sketch: demo ?? Sketch(),
+                        store: demo == nil ? FileSketchStore.applicationSupport() : nil
+                    )
+                    self.model = model
+                    Task { await model.restore() }
                 }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                model?.scenePhaseChanged(to: phase)
             }
         }
     }
