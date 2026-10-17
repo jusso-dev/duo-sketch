@@ -1,3 +1,5 @@
+import Foundation
+
 /// Settings for a dial.
 public struct DialConfig: Sendable, Equatable {
     /// How far the pen travels, in canvas points, for one full turn.
@@ -57,6 +59,24 @@ public struct Dial: Sendable, Equatable {
         }
         lastAngle = angleDegrees
         return rotate(by: Dial.shortestDelta(from: last, to: angleDegrees))
+    }
+
+    /// Touches closer to the centre than this fraction of the dial's radius are
+    /// ignored. Near the centre a 1 pt wobble can swing the finger angle by up to
+    /// 180 degrees, which would jump the pen by half a turn.
+    public static let deadZoneFraction = 0.36
+
+    /// Feeds a touch at `x`, `y` relative to the dial centre (screen points, y
+    /// down) on a dial of `radius`. Inside the dead zone the touch is ignored and
+    /// the dial lets go of its last angle, so leaving the dead zone starts a fresh
+    /// turn from wherever the finger comes out instead of jumping to it.
+    public mutating func drag(touchX x: Double, y: Double, radius: Double) -> DialStep {
+        guard x.isFinite, y.isFinite, radius > 0 else { return .none }
+        guard (x * x + y * y).squareRoot() >= radius * Dial.deadZoneFraction else {
+            lastAngle = nil
+            return .none
+        }
+        return drag(to: atan2(y, x) * 180 / .pi)
     }
 
     public mutating func end() {

@@ -82,19 +82,21 @@ final class SketchViewModel {
         axis == .horizontal ? horizontalDial : verticalDial
     }
 
-    func beginTurn(_ axis: DialAxis, at angle: Double) {
+    func beginTurn(_ axis: DialAxis) {
         haptics.prepare()
         switch axis {
-        case .horizontal: horizontalDial.begin(at: angle)
-        case .vertical: verticalDial.begin(at: angle)
+        case .horizontal: horizontalDial.end()
+        case .vertical: verticalDial.end()
         }
     }
 
-    func drag(_ axis: DialAxis, to angle: Double) {
+    /// A finger at `x`, `y` relative to the dial centre, on a dial of `radius`.
+    /// Touches near the centre are ignored (see `Dial.deadZoneFraction`).
+    func touch(_ axis: DialAxis, x: Double, y: Double, radius: Double) {
         let step: DialStep
         switch axis {
-        case .horizontal: step = horizontalDial.drag(to: angle)
-        case .vertical: step = verticalDial.drag(to: angle)
+        case .horizontal: step = horizontalDial.drag(touchX: x, y: y, radius: radius)
+        case .vertical: step = verticalDial.drag(touchX: x, y: y, radius: radius)
         }
         apply(step, axis: axis)
     }
