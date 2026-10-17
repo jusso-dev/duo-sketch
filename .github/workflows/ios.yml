@@ -50,10 +50,10 @@ jobs:
             echo "$x: no iOS 27.1+ SDK"
           done
           if [ -z "$PICK" ]; then
-            PICK=$(ls -d /Applications/Xcode_27.0*.app 2>/dev/null | sort -V | tail -1)
-            echo "::warning::No Xcode with an iOS 27.1+ SDK found. Falling back to ${PICK:-the default Xcode}. DeviceHinge needs iOS 27.1."
+            echo "::error::No Xcode with an iOS 27.1+ SDK on this runner. DeviceHinge needs iOS 27.1, so the build would not test what it claims to."
+            exit 1
           fi
-          [ -n "$PICK" ] && sudo xcode-select -s "$PICK/Contents/Developer"
+          sudo xcode-select -s "$PICK/Contents/Developer"
           xcodebuild -version
           xcodebuild -showsdks | grep -i ios
           swift --version
@@ -88,11 +88,15 @@ jobs:
             echo "An iOS 27.1+ runtime is already installed."
           else
             echo "No iOS 27.1+ runtime. Downloading with xcodebuild -downloadPlatform iOS."
-            if xcodebuild -downloadPlatform iOS; then
-              echo "Download finished."
-            else
-              echo "::warning::xcodebuild -downloadPlatform iOS failed. Tests will fall back to a standard iPhone on the newest installed runtime."
+            if ! xcodebuild -downloadPlatform iOS; then
+              echo "::error::xcodebuild -downloadPlatform iOS failed, so there is no iOS 27.1+ simulator runtime to test on."
+              exit 1
             fi
+            if ! have_runtime; then
+              echo "::error::The download finished but no iOS 27.1+ simulator runtime is available."
+              exit 1
+            fi
+            echo "Download finished."
           fi
           xcrun simctl list runtimes
 
@@ -104,7 +108,10 @@ jobs:
           def j(*a):
               return json.loads(subprocess.check_output(["xcrun", "simctl", "list", "-j", *a]))
           rts = [r for r in j("runtimes")["runtimes"]
-                 if r.get("isAvailable") and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-27")]
+                 if r.get("isAvailable") and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
+                 and [int(x) for x in r["version"].split(".")[:2]] >= [27, 1]]
+          if not rts:
+              raise SystemExit("::error::No available iOS 27.1+ simulator runtime.")
           rts.sort(key=lambda r: [int(x) for x in r["version"].split(".")], reverse=True)
           alltypes = j("devicetypes")["devicetypes"]
           pick = None
