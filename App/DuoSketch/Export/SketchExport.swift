@@ -10,8 +10,9 @@ struct SketchExport: Transferable {
     /// The on-screen canvas the drawing was made on. Points are fractions of it.
     var canvasSize = CanvasSize(width: 1, height: 1)
     var longSide: Double = 1080
-    /// True for the eucalyptus card around the drawing, false for the drawing alone.
+    /// True for the frame-coloured card around the drawing, false for the drawing alone.
     var framed = true
+    var theme = FrameTheme.eucalyptus
 
     /// PNG render scale. The card is laid out in points at `longSide / scale`.
     static let scale: Double = 3
@@ -55,8 +56,8 @@ struct SketchExport: Transferable {
             width: size.width,
             height: size.height,
             lineWidth: 3,
-            ink: Theme.inkHex,
-            background: Theme.surfaceHex
+            ink: theme.palette.ink,
+            background: theme.palette.surface
         )
     }
 
@@ -67,7 +68,8 @@ struct SketchExport: Transferable {
             sketch: sketch,
             canvas: CGSize(width: inner.width, height: inner.height),
             framed: framed
-        ))
+        )
+        .environment(\.frameTheme, theme))
         renderer.scale = SketchExport.scale
         guard let image = renderer.uiImage, let data = image.pngData() else {
             throw ExportError.renderFailed
@@ -81,6 +83,7 @@ private struct ExportCard: View {
     let sketch: Sketch
     let canvas: CGSize
     let framed: Bool
+    @Environment(\.frameTheme) private var theme
 
     var body: some View {
         let drawing = CanvasView(sketch: sketch, showsPen: false)
@@ -89,7 +92,7 @@ private struct ExportCard: View {
             drawing
                 .clipShape(RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous))
                 .padding(SketchExport.cardPadding)
-                .background(Theme.body)
+                .background(theme.body)
         } else {
             drawing
         }

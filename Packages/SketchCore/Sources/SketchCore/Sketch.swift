@@ -47,6 +47,14 @@ public struct Sketch: Sendable, Equatable, Codable {
         self.strokes = []
     }
 
+    /// A sketch made of `strokes` as they are, for replay frames. The aspect
+    /// ratio is the original drawing's, so a frame sits where the full drawing does.
+    init(replaying strokes: [Stroke], pen: Point, aspectRatio: Double?) {
+        self.pen = pen
+        self.strokes = strokes
+        self.aspectRatio = aspectRatio
+    }
+
     /// True when nothing has been drawn.
     public var isEmpty: Bool {
         !strokes.contains { $0.points.count > 1 }

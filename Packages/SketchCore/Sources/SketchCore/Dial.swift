@@ -18,6 +18,22 @@ public struct DialConfig: Sendable, Equatable {
     public static let standard = DialConfig()
 }
 
+/// How far the pen travels for a turn. Fine gearing is for detail work.
+public enum DialGear: String, Sendable, Equatable, CaseIterable {
+    case coarse
+    case fine
+
+    /// Pen travel compared with coarse gearing.
+    public var multiplier: Double {
+        switch self {
+        case .coarse: return 1
+        case .fine: return 0.25
+        }
+    }
+
+    public var toggled: DialGear { self == .coarse ? .fine : .coarse }
+}
+
 /// The result of turning a dial a little.
 public struct DialStep: Sendable, Equatable {
     /// Rotation in degrees. Positive is clockwise.
@@ -35,6 +51,8 @@ public struct DialStep: Sendable, Equatable {
 /// and detent crossings.
 public struct Dial: Sendable, Equatable {
     public private(set) var config: DialConfig
+    /// Scales pen travel. Detents are unchanged, so ticks feel the same in either gear.
+    public var gear: DialGear = .coarse
     /// Total rotation since creation, in degrees. Positive is clockwise.
     public private(set) var totalDegrees: Double = 0
     private var lastAngle: Double?
@@ -115,7 +133,7 @@ public struct Dial: Sendable, Equatable {
         let after = (totalDegrees / step).rounded(.down)
         return DialStep(
             degrees: degrees,
-            distance: degrees / 360 * config.pointsPerTurn,
+            distance: degrees / 360 * config.pointsPerTurn * gear.multiplier,
             detentsCrossed: Int(exactly: abs(after - before)) ?? 0
         )
     }

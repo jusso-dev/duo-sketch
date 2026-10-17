@@ -9,6 +9,8 @@ The screenshots come from a UI test, `App/DuoSketchUITests/ScreenshotTests.swift
 | `3-easel-mode.png` | Half-open easel mode | `-demoDrawing spiral -foldPosture easel` |
 | `4-shake-clear.png` | Shake clear, mid animation | `-demoDrawing hills -holdShake`, then tap Clear |
 | `5-share-sheet.png` | Share sheet | `-demoDrawing skyline`, then Share, Share with frame |
+| `6-ocean-theme.png` | Ocean frame | `-demoDrawing skyline -frameTheme ocean` |
+| `7-ochre-theme.png` | Ochre frame | `-demoDrawing hills -frameTheme ochre` |
 
 The demo drawings (spiral, hills and skyline) are in `Packages/SketchCore/Sources/SketchCore/DemoDrawings.swift`. They are original and drawn with dial moves only. Demo launches don't read or write the saved drawing, and `-foldPosture` fixes the fold pose so easel mode can be captured on any simulator.
 
@@ -26,7 +28,7 @@ This runs the screenshot tests on a 6.9 inch iPhone (`iPhone 17 Pro Max`) and on
 scripts/screenshots.sh "iPhone 18 Pro Max"
 ```
 
-CI also exports them. Every run uploads a `Screenshots` artifact from the simulator it tested on (an iPhone Duo when the runtime has one). A manual run (Actions, iOS, Run workflow) adds the newest Pro Max iPhone too.
+CI also exports them. Every run uploads a `Screenshots` artifact from the simulator it tested on (an iPhone Duo when the runtime has one). A manual run, or a run on a pull request labelled `screenshots`, adds the 6.9 inch pass and pushes every image to the `ci-screenshots` branch, so you can browse them on GitHub or `git fetch origin ci-screenshots`.
 
 ## iPhone Duo outer display
 

@@ -6,6 +6,7 @@ struct DuoSketchApp: App {
     @State private var hinge = HingeFoldStateService()
     @State private var model: SketchViewModel?
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(SettingsKeys.frameTheme) private var frameTheme = FramePalette.ID.eucalyptus
 
     var body: some Scene {
         WindowGroup {
@@ -13,9 +14,10 @@ struct DuoSketchApp: App {
                 if let model {
                     BoardView(model: model)
                 } else {
-                    Theme.bodyShade.ignoresSafeArea()
+                    FrameTheme(frameTheme).bodyShade.ignoresSafeArea()
                 }
             }
+            .environment(\.frameTheme, FrameTheme(LaunchOptions.frameTheme ?? frameTheme))
             .feedingHinge(into: hinge)
             .onAppear {
                 if model == nil {
@@ -43,10 +45,19 @@ struct DuoSketchApp: App {
 ///   read or write the saved drawing.
 /// - `-foldPosture easel`, `open` or `closed` fixes the fold posture instead of
 ///   reading the hinge, so easel mode can be shown on any simulator.
+/// - `-foldDebug` shows the fold posture and angle; `-frameTheme ocean` picks a theme.
 /// - `-holdShake` freezes a shake clear mid swing and never finishes it, so a
 ///   screenshot of the shake doesn't depend on timing.
 enum LaunchOptions {
     static let holdShake = ProcessInfo.processInfo.arguments.contains("-holdShake")
+
+    /// `-foldDebug` shows the fold posture and hinge angle on the board.
+    static let foldDebug = ProcessInfo.processInfo.arguments.contains("-foldDebug")
+
+    /// `-frameTheme ocean` (or `eucalyptus`, `ochre`) overrides the saved theme.
+    static var frameTheme: FramePalette.ID? {
+        value(after: "-frameTheme").flatMap(FramePalette.ID.init(rawValue:))
+    }
 
     /// Board offset shown while a held shake is on screen.
     static let heldShakeOffset = 12.0

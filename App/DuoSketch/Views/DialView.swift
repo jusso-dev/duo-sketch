@@ -8,7 +8,10 @@ struct DialView: View {
     var diameter: CGFloat = 92
 
     static let accessibilityStepDegrees = 90.0
+    /// Seconds of holding still that switch the dial's gearing.
+    static let gearPressDuration = 0.4
 
+    @Environment(\.frameTheme) private var theme
     @State private var isTurning = false
     /// True while a finger is down. Unlike `onEnded`, this also resets when the
     /// system cancels the gesture (Notification Centre, a call, an edge swipe).
@@ -20,7 +23,7 @@ struct DialView: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [Theme.brass.opacity(0.95), Theme.brassDark],
+                        colors: [theme.dial.opacity(0.95), theme.dialShade],
                         center: .init(x: 0.35, y: 0.3),
                         startRadius: 2,
                         endRadius: diameter * 0.7
@@ -30,17 +33,31 @@ struct DialView: View {
             ticks
                 .rotationEffect(.degrees(dial.capAngle))
             Capsule()
-                .fill(Theme.dialMark)
+                .fill(theme.dialMark)
                 .frame(width: 4, height: diameter * 0.22)
                 .offset(y: -diameter * 0.3)
                 .rotationEffect(.degrees(dial.capAngle))
+            if dial.gear == .fine {
+                // Engraved dot: this dial is in fine gearing.
+                Circle()
+                    .fill(theme.dialMark)
+                    .frame(width: diameter * 0.07, height: diameter * 0.07)
+                    .offset(y: diameter * 0.24)
+                    .accessibilityHidden(true)
+            }
             Image(systemName: axis == .horizontal ? "arrow.left.and.right" : "arrow.up.and.down")
                 .font(.system(size: diameter * 0.16, weight: .semibold))
-                .foregroundStyle(Theme.dialMark)
+                .foregroundStyle(theme.dialMark)
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Circle())
         .gesture(turnGesture)
+        // Holding still on a dial switches its gearing. A still finger doesn't
+        // turn the dial, so the long press never draws.
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: DialView.gearPressDuration, maximumDistance: 8)
+                .onEnded { _ in model.toggleGear(axis) }
+        )
         .onChange(of: isTouching) { _, touching in
             if !touching, isTurning {
                 isTurning = false
@@ -51,6 +68,9 @@ struct DialView: View {
         .accessibilityLabel(axis == .horizontal ? "Across dial" : "Up and down dial")
         .accessibilityValue(model.accessibilityValue(for: axis))
         .accessibilityHint("Swipe up or down to draw")
+        .accessibilityAction(named: dial.gear == .fine ? "Switch to coarse gearing" : "Switch to fine gearing") {
+            model.toggleGear(axis)
+        }
         .accessibilityAdjustableAction { direction in
             // A quarter turn (30 pt) per swipe, so crossing the canvas takes a
             // handful of swipes rather than dozens.
@@ -67,7 +87,7 @@ struct DialView: View {
         return ZStack {
             ForEach(0..<count, id: \.self) { i in
                 Rectangle()
-                    .fill(Theme.brassDark.opacity(0.9))
+                    .fill(theme.dialShade.opacity(0.9))
                     .frame(width: 1.5, height: diameter * 0.07)
                     .offset(y: -diameter * 0.43)
                     .rotationEffect(.degrees(Double(i) / Double(count) * 360))

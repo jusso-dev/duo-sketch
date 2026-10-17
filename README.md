@@ -17,7 +17,7 @@ iPhone Duo has a 5.4 inch outer display and a 7.6 inch inner display that folds.
 | Pose | What happens |
 | --- | --- |
 | Open (inner display) | Full board: large canvas with both dials along the bottom edge. |
-| Half open (20 to 160 degrees) | Easel mode: the canvas sits on the upper half and the dials sit on the lower half, like a little desk toy. |
+| Half open (20 to 160 degrees) | Easel mode: the board splits at the fold. Seated like a laptop, the canvas sits on the upright half and the dials on the half resting on the table. Held like a book, the canvas is on the leading side and the dials on the trailing side. Nothing sits in the fold. |
 | Closed (outer display) | Compact board on the outer display. Your drawing carries over. |
 | Closed for at least 0.4 s, then opened again to 20 degrees or more | The board shakes and clears, ready for a new drawing. For a few seconds afterwards, Undo clear in the toolbar brings the drawing back. A hinge settling by a degree or two after closing doesn't count as opening. |
 
@@ -28,7 +28,7 @@ Hinge data comes from Apple's public SwiftUI API in iOS 27.1, wrapped behind our
 - [`View.onHingeChange(isEnabled:_:)`](https://developer.apple.com/documentation/swiftui/view/onhingechange(isenabled:_:))
 - [Prepare your app for iPhone Duo](https://developer.apple.com/videos/play/tech-talks/111461/) and [Leverage multiple displays and scenes on iPhone Duo](https://developer.apple.com/videos/play/tech-talks/111464/) (Apple Tech Talks)
 
-Apple recommends hinge data for live effects and size classes for layout, so the layout itself follows size classes and the hinge only drives the clear gesture and easel mode.
+Apple recommends hinge data for live effects and size classes and reserved regions for layout. So the layout follows size classes, and when the phone is partly open it places the canvas and dials either side of the fold using the fold's reserved region (`GeometryProxy.reservedRegions(kind: .division)`, iOS 27.1). The board is also trimmed away from camera occlusions. The hinge itself only drives the clear gesture.
 
 ## On other iPhones
 
@@ -41,9 +41,22 @@ Duo Sketch works on every iPhone that runs iOS 18 or later.
 
 ## Sharing and settings
 
-- Share offers the drawing with its eucalyptus frame or on its own. Both come as a PNG at 3x, with an SVG as the second format. Nothing leaves the phone unless you share it.
-- The gear menu turns haptics on or off: dial ticks, edge bumps and the clear pattern. They also follow the system setting.
-- With Reduce Motion on, the board doesn't shake when it clears. The drawing fades out instead.
+- Share offers the drawing with its frame or on its own, as a PNG at 3x with an SVG as the second format. It also offers the replay as a short video. Everything is made on the phone, and nothing leaves it unless you share it.
+- Replay (the play button) draws the picture again in the order you made it, over eight seconds. The dials rest while it plays.
+- Hold a dial still for a moment to switch it to fine gearing: a quarter of the travel per turn, for detail work. A small engraved dot marks a dial in fine gearing. Hold again to switch back. VoiceOver users get a custom action for the same thing.
+- The gear menu has:
+  - Haptics on or off: dial ticks, edge bumps and the clear pattern. They also follow the system setting.
+  - Frame: eucalyptus, ocean or ochre.
+  - Preview on external display: when the phone is connected to a TV or monitor, or AirPlaying, the drawing shows there live for anyone watching.
+- With Reduce Motion on, the board doesn't shake when it clears. The drawing fades out instead, and Replay is off.
+
+### About the outer display
+
+The external display preview uses Apple's scene accessory API (`sceneAccessory` with `ExternalNonInteractiveAccessory`). Apple doesn't offer iPhone Duo's own outer display to apps through this API, except for camera capture (`CameraCaptureAccessory`), so a drawing app can't mirror the board onto the back of the phone.
+
+### Checking fold poses
+
+Launch with `-foldDebug` to show the current fold posture and hinge angle on the board. On the iPhone Duo simulator, use the open, close and fold controls under the device and watch the overlay.
 
 ## Project layout
 

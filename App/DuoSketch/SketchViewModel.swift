@@ -122,8 +122,23 @@ final class SketchViewModel {
         apply(step, axis: axis)
     }
 
+    /// Switches a dial between coarse and fine gearing (long press).
+    func toggleGear(_ axis: DialAxis) {
+        let gear: DialGear
+        switch axis {
+        case .horizontal:
+            horizontalDial.gear = horizontalDial.gear.toggled
+            gear = horizontalDial.gear
+        case .vertical:
+            verticalDial.gear = verticalDial.gear.toggled
+            gear = verticalDial.gear
+        }
+        haptics.bump()
+        announce(gear == .fine ? "Fine gearing" : "Coarse gearing")
+    }
+
     private func apply(_ step: DialStep, axis: DialAxis) {
-        guard step != .none, !clearController.isShaking else { return }
+        guard step != .none, !clearController.isShaking, !isReplaying else { return }
         let move = axis == .horizontal
             ? sketch.movePen(dx: step.distance, dy: 0, in: canvasSize)
             : sketch.movePen(dx: 0, dy: step.distance, in: canvasSize)
@@ -139,6 +154,7 @@ final class SketchViewModel {
     // MARK: Clearing
 
     func beginShakeClear() {
+        stopReplay()
         guard !sketch.isEmpty, clearController.beginShakeClear(at: now) else { return }
         shakeTrigger += 1
         haptics.shake()
@@ -161,6 +177,7 @@ final class SketchViewModel {
     /// Device shake. This is the clear gesture on phones without a hinge
     /// (`.unavailable`), and it works on iPhone Duo too.
     func deviceShaken() {
+        stopReplay()
         let hadInk = !sketch.isEmpty
         let empty = withAnimation(.easeOut(duration: 0.3)) {
             clearController.deviceShaken(sketch: &sketch)
@@ -209,6 +226,41 @@ final class SketchViewModel {
         withAnimation(.easeOut(duration: 0.25)) { sketch = previous }
         dropUndo()
         announce("Drawing restored")
+    }
+
+    // MARK: Replay
+
+    /// The replay being played, or nil. While set, the canvas shows the replay
+    /// and the dials don't draw.
+    private(set) var replay: ReplayTimeline?
+    /// When the current replay started, for the canvas's timeline.
+    private(set) var replayStartedAt: Date?
+    @ObservationIgnored private(set) var replayTask: Task<Void, Never>?
+
+    var isReplaying: Bool { replay != nil }
+
+    /// Plays the drawing back over `ReplayTimeline.duration`. With Reduce
+    /// Motion on there is nothing to play: the finished drawing is already on
+    /// the board.
+    func startReplay(reduceMotion: Bool = false) {
+        guard !sketch.isEmpty, !clearController.isShaking, !isReplaying, !reduceMotion else { return }
+        replay = ReplayTimeline(sketch)
+        replayStartedAt = Date()
+        announce("Replaying the drawing")
+        let sleep = self.sleep
+        replayTask = Task { @MainActor [weak self] in
+            await sleep(ReplayTimeline.duration)
+            guard !Task.isCancelled else { return }
+            self?.stopReplay()
+        }
+    }
+
+    func stopReplay() {
+        guard isReplaying else { return }
+        replayTask?.cancel()
+        replayTask = nil
+        replay = nil
+        replayStartedAt = nil
     }
 
     // MARK: Saving
@@ -260,10 +312,12 @@ final class SketchViewModel {
 
     /// The pen's position along one dial's axis, for VoiceOver.
     func accessibilityValue(for axis: DialAxis) -> String {
+        let position: String
         switch axis {
-        case .horizontal: return "Pen \(Self.percent(sketch.pen.x)) percent across"
-        case .vertical: return "Pen \(Self.percent(sketch.pen.y)) percent down"
+        case .horizontal: position = "Pen \(Self.percent(sketch.pen.x)) percent across"
+        case .vertical: position = "Pen \(Self.percent(sketch.pen.y)) percent down"
         }
+        return dial(axis).gear == .fine ? position + ", fine gearing" : position
     }
 
     private static func percent(_ fraction: Double) -> Int {
