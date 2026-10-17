@@ -109,7 +109,7 @@ struct BoardView: View {
     }
 
     private var surface: some View {
-        CanvasView(sketch: model.sketch)
+        LiveCanvas(model: model)
             .clipShape(RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.surfaceCorner, style: .continuous)
@@ -128,25 +128,53 @@ struct BoardView: View {
             .accessibilityHidden(true)
     }
 
+    // The toolbar buttons and the canvas are separate views that read
+    // `model.sketch` themselves, so a pen move re-runs only them and not the
+    // whole board.
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Button {
-                model.beginShakeClear()
-            } label: {
-                Label("Clear", systemImage: "eraser")
-            }
-            .disabled(model.sketch.isEmpty)
+            ClearButton(model: model)
         }
         ToolbarItem(placement: .topBarTrailing) {
-            ShareLink(
-                item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize),
-                preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
-            ) {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-            .disabled(model.sketch.isEmpty)
+            ShareButton(model: model)
         }
+    }
+}
+
+/// The canvas, reading the sketch from the model in its own body.
+private struct LiveCanvas: View {
+    let model: SketchViewModel
+
+    var body: some View {
+        CanvasView(sketch: model.sketch)
+    }
+}
+
+private struct ClearButton: View {
+    let model: SketchViewModel
+
+    var body: some View {
+        Button {
+            model.beginShakeClear()
+        } label: {
+            Label("Clear", systemImage: "eraser")
+        }
+        .disabled(model.sketch.isEmpty)
+    }
+}
+
+private struct ShareButton: View {
+    let model: SketchViewModel
+
+    var body: some View {
+        ShareLink(
+            item: SketchExport(sketch: model.sketch, canvasSize: model.canvasSize),
+            preview: SharePreview("Duo Sketch drawing", image: Image(systemName: "scribble"))
+        ) {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+        .disabled(model.sketch.isEmpty)
     }
 }
 

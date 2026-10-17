@@ -104,4 +104,18 @@ final class DuoSketchTests: XCTestCase {
         let export = SketchExport(sketch: DemoDrawings.spiral(size: wide), canvasSize: CanvasSize(width: 360, height: 500))
         XCTAssertEqual(export.svgSize, CanvasSize(width: 1080, height: 540))
     }
+
+    /// The settled ink layer must compare equal across ordinary pen moves, so
+    /// SwiftUI keeps it instead of redrawing every point on every move.
+    func testSettledInkLayerIsStableAcrossSmallMoves() {
+        var sketch = DemoDrawings.spiral()
+        let canvas = CanvasSize(width: 360, height: 360)
+        let before = SettledInkLayer(sketch: sketch, split: sketch.inkSplit())
+        sketch.movePen(dx: 3, dy: 0, in: canvas)
+        sketch.movePen(dx: 0, dy: 3, in: canvas)
+        let after = SettledInkLayer(sketch: sketch, split: sketch.inkSplit())
+        XCTAssertEqual(before, after)
+        sketch.fade(by: 0.2)
+        XCTAssertNotEqual(after, SettledInkLayer(sketch: sketch, split: sketch.inkSplit()))
+    }
 }
