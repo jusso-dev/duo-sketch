@@ -7,6 +7,8 @@ struct DialView: View {
     let model: SketchViewModel
     var diameter: CGFloat = 92
 
+    static let accessibilityStepDegrees = 90.0
+
     @State private var isTurning = false
     /// True while a finger is down. Unlike `onEnded`, this also resets when the
     /// system cancels the gesture (Notification Centre, a call, an edge swipe).
@@ -47,11 +49,14 @@ struct DialView: View {
         }
         .accessibilityElement()
         .accessibilityLabel(axis == .horizontal ? "Across dial" : "Up and down dial")
+        .accessibilityValue(model.accessibilityValue(for: axis))
         .accessibilityHint("Swipe up or down to draw")
         .accessibilityAdjustableAction { direction in
+            // A quarter turn (30 pt) per swipe, so crossing the canvas takes a
+            // handful of swipes rather than dozens.
             switch direction {
-            case .increment: model.turn(axis, by: 30)
-            case .decrement: model.turn(axis, by: -30)
+            case .increment: model.turn(axis, by: DialView.accessibilityStepDegrees)
+            case .decrement: model.turn(axis, by: -DialView.accessibilityStepDegrees)
             @unknown default: break
             }
         }

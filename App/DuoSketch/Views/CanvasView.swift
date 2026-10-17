@@ -22,7 +22,23 @@ struct CanvasView: View {
         .background(Theme.surface)
         .accessibilityElement()
         .accessibilityLabel("Drawing")
-        .accessibilityValue(sketch.isEmpty ? "Empty" : "\(sketch.pointCount) points")
+        .accessibilityValue(CanvasView.accessibilityValue(for: sketch))
+    }
+
+    /// What VoiceOver reads for the canvas: whether there is a drawing, how
+    /// many lines it has and where the pen is. A raw point count meant nothing.
+    static func accessibilityValue(for sketch: Sketch) -> String {
+        let pen = "pen \(percent(sketch.pen.x)) percent across, \(percent(sketch.pen.y)) percent down"
+        let lines = sketch.strokes.filter { $0.points.count > 1 }.count
+        switch lines {
+        case 0: return "Empty, \(pen)"
+        case 1: return "Drawing with 1 line, \(pen)"
+        default: return "Drawing with \(lines) lines, \(pen)"
+        }
+    }
+
+    private static func percent(_ fraction: Double) -> Int {
+        Int((min(max(fraction, 0), 1) * 100).rounded())
     }
 }
 
