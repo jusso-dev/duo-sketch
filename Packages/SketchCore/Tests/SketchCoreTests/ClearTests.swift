@@ -56,9 +56,9 @@ final class FoldClearPolicyTests: XCTestCase {
         XCTAssertFalse(p.handle(.open, at: 0))
         XCTAssertFalse(p.handle(.partiallyOpen(angleDegrees: 60), at: 1))
         XCTAssertFalse(p.handle(.closed, at: 1.2))
-        XCTAssertFalse(p.handle(.partiallyOpen(angleDegrees: 50), at: 2))
-        XCTAssertTrue(p.handle(.open, at: 2.5))
-        XCTAssertFalse(p.handle(.open, at: 3), "only once")
+        XCTAssertTrue(p.handle(.partiallyOpen(angleDegrees: 50), at: 2), "reopening to partly open clears")
+        XCTAssertFalse(p.handle(.open, at: 2.5), "only once")
+        XCTAssertFalse(p.handle(.open, at: 3))
     }
 
     func testQuickWobbleDoesNotClear() {
@@ -98,7 +98,7 @@ final class FoldClearPolicyTests: XCTestCase {
     }
 
     func testEndToEndWithMockService() async {
-        let mock = MockFoldStateService(.open)
+        let mock = MockFoldStateService(initial: .open)
         let stream = mock.updates
         mock.closeAndReopen()
         mock.send(.partiallyOpen(angleDegrees: 100))
