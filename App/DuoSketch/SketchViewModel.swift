@@ -19,7 +19,14 @@ final class SketchViewModel {
     /// Bumped each time a shake clear starts; drives the board animation.
     private(set) var shakeTrigger = 0
 
+    var hapticsEnabled: Bool {
+        get { haptics.isEnabled }
+        set { haptics.isEnabled = newValue }
+    }
+
     @ObservationIgnored let foldService: any FoldStateService
+    @ObservationIgnored private let haptics = Haptics()
+    @ObservationIgnored private var throttle = HapticThrottle()
     @ObservationIgnored private var foldPolicy = FoldClearPolicy()
 
     init(foldService: any FoldStateService, sketch: Sketch = Sketch()) {
@@ -53,6 +60,7 @@ final class SketchViewModel {
     }
 
     func beginTurn(_ axis: DialAxis, at angle: Double) {
+        haptics.prepare()
         switch axis {
         case .horizontal: horizontalDial.begin(at: angle)
         case .vertical: verticalDial.begin(at: angle)
@@ -87,10 +95,13 @@ final class SketchViewModel {
 
     private func apply(_ step: DialStep, axis: DialAxis) {
         guard step != .none, !clearController.isShaking else { return }
-        if axis == .horizontal {
-            sketch.movePen(dx: step.distance, dy: 0, in: canvasSize)
-        } else {
-            sketch.movePen(dx: 0, dy: step.distance, in: canvasSize)
+        let move = axis == .horizontal
+            ? sketch.movePen(dx: step.distance, dy: 0, in: canvasSize)
+            : sketch.movePen(dx: 0, dy: step.distance, in: canvasSize)
+        if move.bumpedEdge {
+            haptics.bump()
+        } else if step.detentsCrossed > 0, throttle.shouldFire(at: now) {
+            haptics.tick()
         }
     }
 
@@ -99,6 +110,7 @@ final class SketchViewModel {
     func beginShakeClear() {
         guard !sketch.isEmpty, clearController.beginShakeClear(at: now) else { return }
         shakeTrigger += 1
+        haptics.shake()
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(ClearController.shakeDuration))
             withAnimation(.easeOut(duration: 0.25)) {
@@ -113,5 +125,6 @@ final class SketchViewModel {
         withAnimation(.easeOut(duration: 0.3)) {
             _ = clearController.deviceShaken(sketch: &sketch)
         }
+        haptics.bump()
     }
 }
