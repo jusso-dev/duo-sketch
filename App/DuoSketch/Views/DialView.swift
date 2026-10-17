@@ -64,24 +64,20 @@ struct DialView: View {
     private var turnGesture: some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
-                let angle = angleOf(value.location)
                 if !isTurning {
                     isTurning = true
-                    model.beginTurn(axis, at: angle)
-                } else {
-                    model.drag(axis, to: angle)
+                    model.beginTurn(axis)
                 }
+                model.touch(
+                    axis,
+                    x: value.location.x - diameter / 2,
+                    y: value.location.y - diameter / 2,
+                    radius: diameter / 2
+                )
             }
             .onEnded { _ in
                 isTurning = false
                 model.endTurn(axis)
             }
-    }
-
-    /// Screen angle in degrees, clockwise positive, 0 at three o'clock.
-    private func angleOf(_ location: CGPoint) -> Double {
-        let dx = location.x - diameter / 2
-        let dy = location.y - diameter / 2
-        return atan2(dy, dx) * 180 / .pi
     }
 }

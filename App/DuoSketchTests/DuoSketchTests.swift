@@ -62,4 +62,18 @@ final class DuoSketchTests: XCTestCase {
         model.turn(.horizontal, by: 90)
         XCTAssertFalse(model.sketch.isEmpty, "dials work again after the clear")
     }
+
+    /// A finger resting on the middle of a dial must not draw. Before the dead
+    /// zone, a 1 pt wobble across the centre moved the pen 60 pt.
+    func testWobbleOnDialCentreDoesNotDraw() {
+        let model = SketchViewModel(foldService: UnavailableFoldStateService())
+        model.canvasSize = CanvasSize(width: 240, height: 240)
+        model.beginTurn(.horizontal)
+        model.touch(.horizontal, x: 0.5, y: 0, radius: 46)
+        model.touch(.horizontal, x: -0.5, y: 0, radius: 46)
+        model.touch(.horizontal, x: 0.5, y: 0, radius: 46)
+        model.endTurn(.horizontal)
+        XCTAssertTrue(model.sketch.isEmpty)
+        XCTAssertEqual(model.sketch.pen, .centre)
+    }
 }

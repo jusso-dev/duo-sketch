@@ -75,4 +75,46 @@ final class DialTests: XCTestCase {
         sketch.movePen(dx: 0, dy: dial.rotate(by: -90).distance, in: size)
         XCTAssertEqual(sketch.pen, Point(x: 0.25, y: 0.75))
     }
+
+    // MARK: Dead zone (#16 review, finding 2)
+
+    func testWobbleThroughTheCentreDoesNotMoveThePen() {
+        var dial = Dial()
+        let r = 46.0
+        // A finger resting on the middle of the knob, wobbling by 1 pt.
+        XCTAssertEqual(dial.drag(touchX: 0.5, y: 0, radius: r), .none)
+        XCTAssertEqual(dial.drag(touchX: -0.5, y: 0, radius: r), .none)
+        XCTAssertEqual(dial.drag(touchX: 0, y: 0.5, radius: r), .none)
+        XCTAssertEqual(dial.totalDegrees, 0)
+    }
+
+    func testOldAngleOnlyPathJumpsNearTheCentre() {
+        // Documents the bug the dead zone fixes: 1 pt across the centre is 180 degrees.
+        var dial = Dial()
+        dial.begin(at: atan2(0, 0.5) * 180 / .pi)
+        let jump = dial.drag(to: atan2(0, -0.5) * 180 / .pi)
+        XCTAssertEqual(abs(jump.distance), 60, accuracy: 1e-9)
+    }
+
+    func testLeavingTheDeadZoneStartsAFreshTurn() {
+        var dial = Dial()
+        let r = 46.0
+        XCTAssertEqual(dial.drag(touchX: 40, y: 0, radius: r), .none, "first touch primes")
+        XCTAssertGreaterThan(dial.drag(touchX: 0, y: 40, radius: r).degrees, 0, "quarter turn clockwise")
+        let before = dial.totalDegrees
+        XCTAssertEqual(dial.drag(touchX: 1, y: 1, radius: r), .none, "into the dead zone")
+        // Out the opposite side: no half-turn jump, it just primes.
+        XCTAssertEqual(dial.drag(touchX: -40, y: 0, radius: r), .none)
+        XCTAssertEqual(dial.totalDegrees, before)
+        XCTAssertEqual(dial.drag(touchX: -40, y: -1, radius: r).degrees, atan2(1, 40) * 180 / .pi, accuracy: 1e-9)
+    }
+
+    func testDeadZoneEdge() {
+        var dial = Dial()
+        let r = 50.0
+        let edge = r * Dial.deadZoneFraction
+        XCTAssertEqual(dial.drag(touchX: edge - 0.01, y: 0, radius: r), .none)
+        _ = dial.drag(touchX: edge, y: 0, radius: r)
+        XCTAssertNotEqual(dial.drag(touchX: 0, y: edge, radius: r), .none, "on the boundary counts as outside")
+    }
 }
