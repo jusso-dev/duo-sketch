@@ -29,7 +29,7 @@ private struct HingeFeed: ViewModifier {
 
     func body(content: Content) -> some View {
         content.onHingeChange { _, context in
-            service.update(reading: context.hinge.map(HingeReading.init))
+            service.update(reading: context.hinge.map { HingeReading($0) })
         }
     }
 }

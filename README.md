@@ -4,7 +4,7 @@ A two-dial drawing toy for iPhone, built to make the most of iPhone Duo.
 
 Turn the left dial to draw across, turn the right dial to draw up and down, and use both together for diagonals and curves. When you want a fresh page, fold the phone shut and open it again: the board gives a little shake and the drawing is gone. On any other iPhone, shake the phone instead.
 
-Status: early development. The drawing engine and fold logic are in `Packages/SketchCore` and tested on Linux and macOS. The SwiftUI app lives in `App/`.
+Status: early development. The drawing engine and fold logic are in `Packages/SketchCore` and tested on Linux. The SwiftUI app lives in `App/` and still needs its first build on a Mac. Design notes are in [docs/design.md](docs/design.md).
 
 ## Original design
 
