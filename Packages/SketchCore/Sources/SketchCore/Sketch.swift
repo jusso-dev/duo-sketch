@@ -98,8 +98,8 @@ public struct Sketch: Sendable, Equatable, Codable {
     /// before it. Below half a point the difference can't be seen.
     public static let minimumSpacing = 0.5
 
-    /// Most points a sketch keeps. Past this, every stroke is simplified
-    /// (keeping its ends) until the sketch is back to `simplifiedTarget`.
+    /// Most points a sketch keeps. Past this, the oldest part of the drawing is
+    /// thinned until the sketch is back to `simplifiedTarget`.
     public static let maximumPoints = 20_000
     static let simplifiedTarget = 15_000
 
@@ -122,7 +122,7 @@ public struct Sketch: Sendable, Equatable, Codable {
         }
         strokes[last].points.append(next)
         if pointCount > Sketch.maximumPoints {
-            simplify(toAtMost: Sketch.simplifiedTarget)
+            simplify(toAtMost: Sketch.simplifiedTarget, in: size)
         }
     }
 
@@ -133,31 +133,50 @@ public struct Sketch: Sendable, Equatable, Codable {
         return (dx * dx + dy * dy).squareRoot()
     }
 
-    /// Thins every stroke, doubling the spacing between kept points until the
-    /// sketch has at most `target` points. Each pass is O(n) and roughly halves
-    /// the density, so detail fades gradually instead of collapsing. Stroke ends
-    /// are always kept, so the pen stays where it is. Runs rarely: only after
-    /// `maximumPoints`, then not again until thousands more points are drawn.
-    mutating func simplify(toAtMost target: Int) {
-        var spacing = 0.002 // normalised, about 0.8 pt on a 400 pt canvas
-        while pointCount > target, spacing < 1 {
-            for i in strokes.indices where strokes[i].points.count > 2 {
-                strokes[i].points = Sketch.thinned(strokes[i].points, minimumDistance: spacing)
+    /// The newest points are never thinned, so the part being drawn keeps full detail.
+    public static let newestPointsKept = 5_000
+
+    /// Thins the oldest part of the drawing, doubling the spacing between kept
+    /// points (in canvas points, so both axes are treated the same) until the
+    /// sketch has at most `target` points. The newest `newestPointsKept` points
+    /// and every stroke's ends are left alone. Each pass is O(n). Runs rarely:
+    /// only after `maximumPoints`, then not again until thousands more points
+    /// are drawn.
+    mutating func simplify(toAtMost target: Int, in size: CanvasSize) {
+        var spacing = 1.0 // canvas points
+        while pointCount > target, spacing < max(size.width, size.height) {
+            var oldRemaining = pointCount - Sketch.newestPointsKept
+            guard oldRemaining > 2 else { return }
+            for i in strokes.indices {
+                guard oldRemaining > 0 else { break }
+                let count = strokes[i].points.count
+                if count <= oldRemaining {
+                    oldRemaining -= count
+                    strokes[i].points = Sketch.thinned(strokes[i].points, minimumDistance: spacing, in: size)
+                } else {
+                    // The stroke straddles the newest points: thin only its older part.
+                    let split = oldRemaining
+                    oldRemaining = 0
+                    guard split > 2 else { break }
+                    var head = Sketch.thinned(Array(strokes[i].points[0..<split]), minimumDistance: spacing, in: size)
+                    head.append(contentsOf: strokes[i].points[split...])
+                    strokes[i].points = head
+                }
             }
             spacing *= 2
         }
     }
 
     /// Keeps the first and last point, and each point in between that is at
-    /// least `minimumDistance` (normalised) from the last point kept.
-    static func thinned(_ points: [Point], minimumDistance: Double) -> [Point] {
+    /// least `minimumDistance` canvas points from the last point kept.
+    static func thinned(_ points: [Point], minimumDistance: Double, in size: CanvasSize) -> [Point] {
         guard points.count > 2 else { return points }
         let limit = minimumDistance * minimumDistance
         var out: [Point] = [points[0]]
         out.reserveCapacity(points.count)
         for p in points[1..<(points.count - 1)] {
             let k = out[out.count - 1]
-            let dx = p.x - k.x, dy = p.y - k.y
+            let dx = (p.x - k.x) * size.width, dy = (p.y - k.y) * size.height
             if dx * dx + dy * dy >= limit { out.append(p) }
         }
         out.append(points[points.count - 1])
