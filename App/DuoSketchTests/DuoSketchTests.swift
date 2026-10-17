@@ -33,4 +33,12 @@ final class DuoSketchTests: XCTestCase {
         model.deviceShaken()
         XCTAssertTrue(model.sketch.isEmpty)
     }
+
+    /// The share sheet offers Save Image for the PNG export. Without this key
+    /// iOS terminates the app the first time someone taps it.
+    func testInfoPlistDeclaresPhotoLibraryAddUsage() {
+        let text = Bundle.main.object(forInfoDictionaryKey: "NSPhotoLibraryAddUsageDescription") as? String
+        XCTAssertNotNil(text, "NSPhotoLibraryAddUsageDescription is missing from the app's Info.plist")
+        XCTAssertFalse(text?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
+    }
 }

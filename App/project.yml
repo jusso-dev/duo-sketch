@@ -25,6 +25,7 @@ targets:
       path: DuoSketch/Info.plist
       properties:
         CFBundleDisplayName: Duo Sketch
+        NSPhotoLibraryAddUsageDescription: Duo Sketch saves your drawing to your photo library when you choose Save Image.
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
