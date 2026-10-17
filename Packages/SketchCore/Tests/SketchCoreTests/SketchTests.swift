@@ -131,13 +131,13 @@ final class SketchTests: XCTestCase {
             Point(x: 0, y: 0), Point(x: 0.001, y: 0), Point(x: 0.01, y: 0),
             Point(x: 0.011, y: 0), Point(x: 0.0115, y: 0)
         ]
-        let out = Sketch.thinned(line, minimumDistance: 0.005)
+        let out = Sketch.thinned(line, minimumDistance: 0.005, in: CanvasSize(width: 1, height: 1))
         XCTAssertEqual(out, [Point(x: 0, y: 0), Point(x: 0.01, y: 0), Point(x: 0.0115, y: 0)])
     }
 
     func testThinningLeavesShortStrokesAlone() {
         let two = [Point(x: 0, y: 0), Point(x: 0.0001, y: 0)]
-        XCTAssertEqual(Sketch.thinned(two, minimumDistance: 0.5), two)
+        XCTAssertEqual(Sketch.thinned(two, minimumDistance: 0.5, in: CanvasSize(width: 1, height: 1)), two)
     }
 
     // MARK: Canvas shape changes (SK-3)
@@ -203,5 +203,34 @@ final class SketchTests: XCTestCase {
         let json = #"{"pen":{"x":0.5,"y":0.5},"strokes":[],"touchingEdge":false}"#
         let s = try JSONDecoder().decode(Sketch.self, from: Data(json.utf8))
         XCTAssertNil(s.aspectRatio)
+    }
+
+    // MARK: Thinning (SK-5)
+
+    func testThinningMeasuresInCanvasPoints() {
+        // On a 800 x 100 canvas, 0.01 across is 8 pt but 0.01 down is only 1 pt.
+        let canvas = CanvasSize(width: 800, height: 100)
+        let across = [Point(x: 0, y: 0), Point(x: 0.01, y: 0), Point(x: 0.02, y: 0), Point(x: 0.03, y: 0)]
+        let down = [Point(x: 0, y: 0), Point(x: 0, y: 0.01), Point(x: 0, y: 0.02), Point(x: 0, y: 0.03)]
+        XCTAssertEqual(Sketch.thinned(across, minimumDistance: 4, in: canvas).count, 4, "8 pt apart: all kept")
+        XCTAssertEqual(Sketch.thinned(down, minimumDistance: 4, in: canvas).count, 2, "1 pt apart: only the ends")
+    }
+
+    func testCapLeavesTheNewestPointsAlone() {
+        var s = Sketch(pen: Point(x: 0.05, y: 0.95))
+        let canvas = CanvasSize(width: 400, height: 400)
+        var direction = 1.0
+        for i in 0..<19_000 {
+            if i.isMultiple(of: 600) { direction = -direction }
+            if i.isMultiple(of: 2) { s.movePen(dx: direction, dy: 0, in: canvas) } else { s.movePen(dx: 0, dy: (i % 4 == 1) ? 1 : -1, in: canvas) }
+        }
+        XCTAssertGreaterThan(s.pointCount, 15_000, "below the cap so far")
+        let newest = Array(s.strokes[0].points.suffix(Sketch.newestPointsKept))
+        let oldest = s.strokes[0].points.first
+        s.simplify(toAtMost: 10_000, in: canvas)
+        XCTAssertLessThanOrEqual(s.pointCount, 10_000)
+        XCTAssertEqual(Array(s.strokes[0].points.suffix(Sketch.newestPointsKept)), newest, "newest points untouched")
+        XCTAssertEqual(s.strokes[0].points.first, oldest, "stroke start kept")
+        XCTAssertEqual(s.strokes[0].points.last, s.pen)
     }
 }
